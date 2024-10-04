@@ -60,7 +60,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
+WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
+
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://alltech.gachara.store")
