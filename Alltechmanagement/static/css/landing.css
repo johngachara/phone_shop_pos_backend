@@ -1,0 +1,12 @@
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .hero-section {
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://source.unsplash.com/1920x1080/?technology') center center/cover no-repeat;
+            color: #ffffff;
+            text-align: center;
+            padding: 100px 0;
+            margin-bottom: 30px;
+        }
