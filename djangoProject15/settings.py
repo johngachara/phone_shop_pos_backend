@@ -62,7 +62,7 @@ MIDDLEWARE = [
     'csp.middleware.CSPMiddleware',
 ]
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net")
+CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net","https://alltech.gachara.store")
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net",)
 CSP_IMG_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com","https://source.unsplash.com")
 CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com")  # Restrict to specific font CDNs
