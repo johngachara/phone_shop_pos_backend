@@ -15,10 +15,11 @@ from pathlib import Path
 from django.contrib import messages
 import os
 from dotenv import load_dotenv
+from django.middleware.cache import UpdateCacheMiddleware, FetchFromCacheMiddleware
+
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -29,8 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1','localhost', os.getenv('SERVER_URL')]
-
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL')]
 
 # Application definition
 
@@ -53,7 +53,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -67,7 +69,8 @@ WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://alltech.gachara.store")
-CSP_IMG_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com", "https://source.unsplash.com")
+CSP_IMG_SRC = (
+    "'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com", "https://source.unsplash.com")
 CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com")
 CSP_FRAME_SRC = ("'none'",)
 CSP_OBJECT_SRC = ("'none'",)
@@ -79,24 +82,21 @@ CORS_ALLOWED_ORIGINS = [
     'https://main.gachara.store',
     'https://shop1.gachara.store',
     'http://localhost:3000',
-    
+
 ]
 
-# Ensure HTTPS is used
-SECURE_SSL_REDIRECT = True
-
 # HSTS settings
-SECURE_HSTS_SECONDS = 300
+SECURE_SSL_REDIRECT = True
+SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-
-# Other security settings
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
 
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 CORS_ALLOW_METHODS = [
     'GET',
     'POST',
@@ -106,6 +106,9 @@ CORS_ALLOW_METHODS = [
     'OPTIONS'
 ]
 
+CORS_ALLOW_CREDENTIALS = True
+
+WHITENOISE_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_HEADERS = [
     'content-type',
     'authorization'
@@ -173,7 +176,8 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "PASSWORD": os.getenv('REDIS_PASS'),
-        }
+        },
+        "KEY_PREFIX": "alltech_mgmt"
     }
 }
 REST_FRAMEWORK = {
@@ -182,6 +186,10 @@ REST_FRAMEWORK = {
     ]
 }
 
+# Cache middleware settings
+CACHE_MIDDLEWARE_ALIAS = 'default'
+CACHE_MIDDLEWARE_SECONDS = 600  # 10 minutes
+CACHE_MIDDLEWARE_KEY_PREFIX = 'alltech_mgmt'
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -201,6 +209,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'Alltechmanagement/static')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 '''STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "Alltechmanagement/static"),
 ]'''
@@ -218,8 +227,6 @@ MESSAGE_TAGS = {
     messages.WARNING: 'alert-warning',
     messages.ERROR: 'alert alert-danger alert-dismissible fade show',
 }
-LOGIN_URL = 'signin'
-
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -228,10 +235,10 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
-KEY = os.path.join(BASE_DIR,'key_pair.json')
+KEY = os.path.join(BASE_DIR, 'key_pair.json')
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

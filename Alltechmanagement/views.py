@@ -278,7 +278,6 @@ def send_sales2_api(request):
         if data.exists():
             total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
             with django_transaction.atomic():
-
                 saved = SAVED_TRANSACTIONS2_FIX.objects.all()
 
                 # Render the HTML email content using Django templates
@@ -304,8 +303,6 @@ def send_sales2_api(request):
         return Response("No items to send")
     except Exception as e:
         return Response({'detail': str(e)}, status=500)
-
-
 
 
 '''
@@ -839,3 +836,11 @@ def send_accessories_shop1(request):
     except Exception as e:
         print(f"Unexpected error: {e}")
         return Response("An unexpected error occurred.", status=500)
+
+
+def custom_404(request, exception):
+    return render(request, '404.html', status=404)
+
+
+def custom_500(request):
+    return render(request, '500.html', status=500)
