@@ -65,7 +65,12 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
-
+SECURE_HEADERS = {
+    'Permissions-Policy': (
+        "geolocation=(), camera=(), microphone=(), autoplay=(self), fullscreen=(), "
+        "payment=(), usb=(), gyroscope=(), magnetometer=(), accelerometer=()"
+    )
+}
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://alltech.gachara.store")
