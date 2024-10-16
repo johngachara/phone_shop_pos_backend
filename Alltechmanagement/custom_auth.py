@@ -1,7 +1,8 @@
-from django.utils import timezone
+from datetime import datetime, timezone
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework.exceptions import AuthenticationFailed
+from django.utils import timezone as django_timezone  # Use Django's timezone for current time
 
 
 class CustomUser:
@@ -23,9 +24,11 @@ class CustomJWTAuthentication(JWTAuthentication):
             # Check if the token has expired
             exp = validated_token.get('exp')
             if exp is not None:
-                # Convert the offset-naive datetime to offset-aware
-                exp_datetime = timezone.datetime.fromtimestamp(exp, tz=timezone.utc)
-                if timezone.now() > exp_datetime:
+                # Convert timestamp to a timezone-aware datetime
+                exp_datetime = datetime.fromtimestamp(exp, tz=timezone.utc)
+
+                # Compare with Django's timezone-aware current time
+                if django_timezone.now() > exp_datetime:
                     raise InvalidToken('Token has expired')
 
             return CustomUser(firebase_uid=firebase_uid)
