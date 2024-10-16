@@ -3,48 +3,51 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ heading }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-    <link rel="stylesheet" href={% static 'css/complete.css' %}>
+     <link rel="stylesheet" href="{% static 'css/complete.css' %}">
 </head>
 <body>
     <section class="section">
         <div class="container">
-            <div class="logo">ALLTECH</div>
-            <h1 class="title">{{ heading }}</h1>
+            <div class="logo mb-5">ALLTECH</div>
+            <h1 class="title is-2 mb-5">{{ heading }}</h1>
             <div class="message">
-                <p>Dear Admin,</p>
+                <p class="mb-3">Dear Admin,</p>
                 <p>Here are the sales transactions from Shop 2 this week. Please review the details below.</p>
             </div>
-            <table class="table is-fullwidth is-bordered is-striped">
-                <thead>
-                    <tr>
-                        <th>Product Name</th>
-                        <th>Price</th>
-                        <th>Quantity</th>
-                        <th>Customer</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for transaction in transactions %}
-                    <tr>
-                        <td>{{ transaction.product_name }}</td>
-                        <td>{{ transaction.selling_price }}</td>
-                        <td>{{ transaction.quantity }}</td>
-                        <td>{{ transaction.customer_name }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="3" class="total">Total:</th>
-                        <th class="total">{{ total }}</th>
-                    </tr>
-                </tfoot>
-            </table>
-            <div class="message">
-                <p>Thank you,</p>
-                <p> AllTech </p>
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Product Name</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Customer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                        <tr>
+                            <td>{{ transaction.product_name }}</td>
+                            <td>{{ transaction.selling_price }}</td>
+                            <td>{{ transaction.quantity }}</td>
+                            <td>{{ transaction.customer_name }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="3" class="total has-text-right">Total:</th>
+                            <th class="total">{{ total }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="message mt-5">
+                <p class="mb-3">Thank you for your attention to this matter.</p>
+                <p class="signature">AllTech Management</p>
             </div>
         </div>
     </section>

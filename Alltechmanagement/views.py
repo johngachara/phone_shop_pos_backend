@@ -38,7 +38,7 @@ client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH
 # An index is where the documents are stored.
 index = client.index('Shop2Stock')
 
-logger = logging.getLogger('django.security')
+logger = logging.getLogger('django')
 
 
 def landing(request):

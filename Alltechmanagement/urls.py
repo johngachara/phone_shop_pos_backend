@@ -3,12 +3,15 @@ from . import views
 from django.conf.urls import handler404, handler500
 from .celery_auth_api import CeleryAuthTokenView
 from .firebase_auth import FirebaseAuthTokenView
+from .refresh_token_view import RefreshTokenView
+
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
 urlpatterns = [
     path('', views.landing, name='landing'),
     path('api/firebase-auth/', FirebaseAuthTokenView.as_view(), name='firebase-auth'),
     path('api/get_shop2_stock', views.get_shop2_stock, name='get_shop2_stock_api'),
+    path('api/refresh-token/',RefreshTokenView.as_view(), name='refresh-token'),
     path('api/get_shop2_stock_api/<int:id>', views.get_shop2_stock_api, name='get_shop2_stock_api'),
     path('api/sell2/<int:product_id>', views.sell_api, name='sell2api'),
     path('api/saved2', views.get_saved2, name='saved_api2'),

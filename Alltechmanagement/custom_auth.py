@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework.exceptions import AuthenticationFailed
@@ -19,7 +20,14 @@ class CustomJWTAuthentication(JWTAuthentication):
             if not firebase_uid:
                 raise InvalidToken('Token contains no valid firebase_uid')
 
-            # Return an instance of the CustomUser class
+            # Check if the token has expired
+            exp = validated_token.get('exp')
+            if exp is not None:
+                # Convert the offset-naive datetime to offset-aware
+                exp_datetime = timezone.datetime.fromtimestamp(exp, tz=timezone.utc)
+                if timezone.now() > exp_datetime:
+                    raise InvalidToken('Token has expired')
+
             return CustomUser(firebase_uid=firebase_uid)
         except Exception as e:
             raise AuthenticationFailed(str(e))

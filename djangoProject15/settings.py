@@ -73,7 +73,7 @@ SECURE_HEADERS = {
 }
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
-CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://alltech.gachara.store")
+CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_IMG_SRC = (
     "'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com", "https://source.unsplash.com")
 CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com")
@@ -222,17 +222,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
-
-CRISPY_TEMPLATE_PACK = "bootstrap5"
-MESSAGE_TAGS = {
-    messages.DEBUG: 'alert-info',
-    messages.INFO: 'alert-info',
-    messages.SUCCESS: 'alert alert-success alert-dismissible fade show',
-    messages.WARNING: 'alert-warning',
-    messages.ERROR: 'alert alert-danger alert-dismissible fade show',
-}
-
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
@@ -240,7 +229,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 KEY = os.path.join(BASE_DIR, 'key_pair.json')
@@ -258,10 +247,16 @@ LOGGING = {
         },
     },
     'handlers': {
-        'file': {
+        'django_file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
             'filename': 'django.log',
+            'formatter': 'verbose',
+        },
+        'scheduler_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'scheduler.log',
             'formatter': 'verbose',
         },
         'console': {
@@ -272,12 +267,12 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['django_file', 'console'],
             'level': 'INFO',
             'propagate': True,
         },
         'scheduler': {
-            'handlers': ['file', 'console'],
+            'handlers': ['scheduler_file', 'console'],
             'level': 'DEBUG',
             'propagate': True,
         },

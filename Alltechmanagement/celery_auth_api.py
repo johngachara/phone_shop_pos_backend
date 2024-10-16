@@ -7,7 +7,7 @@ import json
 
 from djangoProject15 import settings
 
-logger = logging.getLogger('django.security')
+logger = logging.getLogger('scheduler')
 
 
 class CeleryAuthTokenView(APIView):
