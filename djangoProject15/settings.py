@@ -47,17 +47,19 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
-    'csp'
+    'csp',
+    'django_extensions',
+    'channels'
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.cache.FetchFromCacheMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    "corsheaders.middleware.CorsMiddleware",
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -71,6 +73,8 @@ SECURE_HEADERS = {
         "payment=(), usb=(), gyroscope=(), magnetometer=(), accelerometer=()"
     )
 }
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_CREDENTIALS = True
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net")
@@ -100,7 +104,6 @@ SECURE_BROWSER_XSS_FILTER = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
-
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 CORS_ALLOW_METHODS = [
     'GET',
@@ -111,12 +114,11 @@ CORS_ALLOW_METHODS = [
     'OPTIONS'
 ]
 
-CORS_ALLOW_CREDENTIALS = True
-
 WHITENOISE_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_HEADERS = [
     'content-type',
-    'authorization'
+    'authorization',
+    'X-CSRFToken',
 ]
 CELERY_API_KEY = os.getenv('CELERY_KEY')
 TEMPLATES = [
@@ -138,7 +140,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'djangoProject15.wsgi.application'
 
-#ASGI_APPLICATION = 'djangoProject15.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
@@ -188,12 +189,11 @@ CACHES = {
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'Alltechmanagement.custom_auth.CustomJWTAuthentication',
+        'Alltechmanagement.custom_auth.FirebaseAuthentication'
     ]
 }
 
 # Cache middleware settings
-CACHE_MIDDLEWARE_ALIAS = 'default'
-CACHE_MIDDLEWARE_SECONDS = 600  # 10 minutes
 CACHE_MIDDLEWARE_KEY_PREFIX = 'alltech_mgmt'
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
@@ -220,7 +220,8 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 ]'''
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-
+#DJANGO_ALLOW_ASYNC_UNSAFE = True  # Only in development
+ASGI_APPLICATION = 'djangoProject15.asgi.application'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

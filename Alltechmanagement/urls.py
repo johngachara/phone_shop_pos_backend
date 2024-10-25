@@ -4,7 +4,6 @@ from django.conf.urls import handler404, handler500
 from .celery_auth_api import CeleryAuthTokenView
 from .firebase_auth import FirebaseAuthTokenView
 from .refresh_token_view import RefreshTokenView
-
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
 urlpatterns = [

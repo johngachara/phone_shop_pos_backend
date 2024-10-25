@@ -1,9 +1,11 @@
 import os
+from functools import wraps
+from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 from collections import defaultdict
 from datetime import timedelta, datetime
-import requests
 from django.core.cache import cache
+import asyncio
 import time
 from django.db.models.functions import ExtractHour, TruncDate, ExtractMonth, ExtractYear, Lower
 from django.template.loader import render_to_string
@@ -39,6 +41,20 @@ client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH
 index = client.index('Shop2Stock')
 
 logger = logging.getLogger('django')
+
+
+#Custom Decorator for async api views
+def async_api_view(methods):
+    def decorator(func):
+        @api_view(methods)
+        @permission_classes([IsAuthenticated])
+        @wraps(func)
+        def wrapper(request, *args, **kwargs):
+            return asyncio.run(func(request, *args, **kwargs))
+
+        return wrapper
+
+    return decorator
 
 
 def landing(request):
@@ -94,45 +110,102 @@ def get_shop2_stock_api(request, id):
     return Response({'data': cached_data})
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def sell_api(request, product_id):
-    # Deserialize the request data using the serializer
-    product = SHOP2_STOCK_FIX.objects.get(pk=product_id)
+@async_api_view(['POST'])
+async def sell_api(request, product_id):
+    # Validate serializer
     serializer = SellSerializer(data=request.data)
-    if serializer.is_valid():
-        # Extract validated data from the serializer
-        with django_transaction.atomic():
-            product_name = serializer.validated_data.get('product_name')
-            price = serializer.data['price']
-            quantity = serializer.data['quantity']
-            customer_name = serializer.validated_data.get('customer_name')
-            product.quantity -= quantity
-            product.save()
-            saved_transaction = SAVED_TRANSACTIONS2_FIX.objects.create(product_name=product_name, selling_price=price,
-                                                                       quantity=quantity, customer_name=customer_name)
-            transaction_id = saved_transaction.id
-            id = product_id
-            body = {
-                'id': id,
-                'product_name': product_name,
-                'price': price,
-                'quantity': product.quantity,
-            }
-            response = index.update_documents([body])
-            response_data = response.json()
-            cache.delete(f'SHOP_STOCK_{product_id}')
-            cache.delete('SHOP_STOCK')
-            return Response({'data': serializer.data, 'transaction_id': transaction_id}, status=status.HTTP_200_OK)
-
-    else:
+    if not serializer.is_valid():
         return Response(serializer.errors, status=400)
+
+    try:
+        # Define database operations that need to be run synchronously
+        @sync_to_async
+        def perform_db_operations():
+            with django_transaction.atomic():
+                # Get product with select_for_update to prevent race conditions
+                product = (SHOP2_STOCK_FIX.objects
+                           .select_for_update()
+                           .get(pk=product_id))
+
+                quantity = serializer.validated_data['quantity']
+
+                # Validate quantity
+                if product.quantity < quantity:
+                    raise ValueError('Insufficient stock')
+
+                # Update product quantity using F() to prevent race conditions
+                product.quantity = F('quantity') - quantity
+                product.save()
+
+                # Create saved transaction
+                saved_transaction = SAVED_TRANSACTIONS2_FIX.objects.create(
+                    product_name=serializer.validated_data['product_name'],
+                    selling_price=serializer.validated_data['price'],
+                    quantity=quantity,
+                    customer_name=serializer.validated_data['customer_name']
+                )
+
+                # Refresh product to get actual quantity
+                product.refresh_from_db()
+
+                return product, saved_transaction
+
+        # Execute database operations
+        try:
+            product, saved_transaction = await perform_db_operations()
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Prepare response data
+        response_data = {
+            'data': serializer.data,
+            'transaction_id': saved_transaction.id
+        }
+
+        # Handle non-critical async operations
+        async def async_operations():
+            try:
+                # Update search index
+                body = {
+                    'id': product_id,
+                    'product_name': serializer.validated_data['product_name'],
+                    'price': int(serializer.validated_data['price']),
+                    'quantity': product.quantity,
+                }
+
+                index.update_documents([body])
+            except Exception as e:
+                print(f"Error updating index: {e}")
+
+            # Clear cache using async cache operations
+            await cache.adelete(f'SHOP_STOCK_{product_id}')
+            await cache.adelete('SHOP_STOCK')
+
+        # Create background task for async operations
+
+        await asyncio.create_task(async_operations())
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except SHOP2_STOCK_FIX.DoesNotExist:
+        return Response(
+            {'error': 'Product not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_saved2(request):
-    data = SAVED_TRANSACTIONS2_FIX.objects.order_by('-created_at')
+    data = SAVED_TRANSACTIONS2_FIX.objects.all()
     serializer = saved_serializer2(instance=data, many=True)
     return Response({'data': serializer.data})
 
@@ -154,118 +227,192 @@ def complete_transaction2_api(request, transaction_id):
         return Response('Completed transaction', status=200)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def add_stock2_api(request):
+@async_api_view(['POST'])
+async def add_stock2_api(request):
     if request.method == 'POST':
         data = request.data
         serializer = shop2_serializer(data=data)
 
-        if serializer.is_valid(raise_exception=True):
-            with django_transaction.atomic():
-                serializer.save()
+        @sync_to_async
+        def validate_and_save():
+            if serializer.is_valid(raise_exception=True):
+                with django_transaction.atomic():
+                    instance = serializer.save()
+                    return instance, serializer.data
+            return None, None
 
-                product_name = serializer.data['product_name']
-                price = serializer.data['price']
-                quantity = serializer.data['quantity']
-                body = {
-                    'id': serializer.data['id'],
-                    'product_name': product_name,
-                    'price': price,
-                    'quantity': quantity,
-                }
+        try:
+            instance, serializer_data = await validate_and_save()
+            if not instance:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+            # Prepare index data
+            body = {
+                'id': serializer_data['id'],
+                'product_name': serializer_data['product_name'],
+                'price': serializer_data['price'],
+                'quantity': serializer_data['quantity'],
+            }
+
+            # Handle non-critical operations
+            async def async_operations():
                 try:
-                    response = index.add_documents(body)
-                    response_data = response.json()
-                    cache.delete('SHOP_STOCK')
-                    return Response(serializer.data, status=status.HTTP_200_OK)
-                except requests.exceptions.RequestException as e:
-                    return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    index.add_documents(body)
+                    await cache.adelete('SHOP_STOCK')
+                except Exception as e:
+                    print(f"Error in async operations: {e}")
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Create background task
+            await asyncio.create_task(async_operations())
+
+            return Response(serializer_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    return Response(
+        {'error': 'Invalid request method'},
+        status=status.HTTP_400_BAD_REQUEST
+    )
 
 
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_stock2_api(request, id):
+@async_api_view(['DELETE'])
+async def delete_stock2_api(request, id):
     try:
-        with django_transaction.atomic():
-            data = SHOP2_STOCK_FIX.objects.get(pk=id)
-            response = index.delete_document(id)
-            response_data = response.json()
-            cache.delete(f'SHOP_STOCK_{id}')
-            cache.delete('SHOP_STOCK')
-            data.delete()
-            return Response(response_data, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({"Error": e})
-
-
-@api_view(['PUT', 'PATCH'])
-@permission_classes([IsAuthenticated])
-def update_stock2_api(request, id):
-    try:
-        data = SHOP2_STOCK_FIX.objects.get(pk=id)
-        serializer = shop2_serializer(instance=data, data=request.data, partial=True)
-        if serializer.is_valid(raise_exception=True):
+        @sync_to_async
+        def delete_from_db():
             with django_transaction.atomic():
-                serializer.save()
-                product_name = serializer.data['product_name']
-                price = serializer.data['price']
-                quantity = serializer.data['quantity']
+                data = SHOP2_STOCK_FIX.objects.get(pk=id)
+                data_copy = {
+                    'id': data.id,
+                    'product_name': data.product_name,
+                    'price': data.price,
+                    'quantity': data.quantity
+                }
+                data.delete()
+                return data_copy
+
+        # Delete from database
+        deleted_data = await delete_from_db()
+
+        # Handle non-critical operations
+        async def async_operations():
+            try:
+                index.delete_document(id)
+                await cache.adelete(f'SHOP_STOCK_{id}')
+                await cache.adelete('SHOP_STOCK')
+            except Exception as e:
+                print(f"Error in async operations: {e}")
+
+        # Create background task
+        await asyncio.create_task(async_operations())
+
+        return Response({'status': 'success'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"Error": str(e)})
+
+
+@async_api_view(['PUT', 'PATCH'])
+async def update_stock2_api(request, id):
+    @sync_to_async
+    def validate_and_update():
+        try:
+            data = SHOP2_STOCK_FIX.objects.get(pk=id)
+            serializer = shop2_serializer(instance=data, data=request.data, partial=True)
+            if serializer.is_valid(raise_exception=True):
+                with django_transaction.atomic():
+                    instance = serializer.save()
+                    return instance, serializer.data
+            return None, None
+        except SHOP2_STOCK_FIX.DoesNotExist:
+            return None, None
+
+    try:
+        instance, serializer_data = await validate_and_update()
+        if not instance:
+            return Response(
+                {"error": "Object not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Handle non-critical operations
+        async def async_operations():
+            try:
                 body = {
                     'id': id,
-                    'product_name': product_name,
-                    'price': price,
-                    'quantity': quantity,
+                    'product_name': serializer_data['product_name'],
+                    'price': serializer_data['price'],
+                    'quantity': serializer_data['quantity'],
                 }
-                response = index.update_documents([body])
-                response_data = response.json()
-                cache.delete(f'SHOP_STOCK_{id}')
-                cache.delete('SHOP_STOCK')
-                return Response(response_data, status=status.HTTP_200_OK)
+                index.update_documents([body])
+                await cache.adelete(f'SHOP_STOCK_{id}')
+                await cache.adelete('SHOP_STOCK')
+            except Exception as e:
+                print(f"Error in async operations: {e}")
 
-    except SHOP2_STOCK_FIX.DoesNotExist:
-        return Response({"error": "Object not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Create background task
+        await asyncio.create_task(async_operations())
+
+        return Response(serializer_data, status=status.HTTP_200_OK)
+
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def refund2_api(request, id):
+@async_api_view(['GET'])
+async def refund2_api(request, id):
+    @sync_to_async
+    def process_refund():
+        try:
+            with django_transaction.atomic():
+                transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=id)
+                item = SHOP2_STOCK_FIX.objects.filter(
+                    product_name__iexact=transaction.product_name
+                ).first()
+
+                if not item:
+                    return None, 'Item not found in stock'
+
+                item.quantity += 1
+                item.save()
+                transaction.delete()
+                return item, None
+        except SAVED_TRANSACTIONS2_FIX.DoesNotExist:
+            return None, 'Transaction not found'
+        except Exception as e:
+            return None, str(e)
+
     try:
-        # Retrieve the transaction by its ID
-        transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=id)
+        item, error = await process_refund()
+        if error:
+            return Response({'error': error}, status=404)
 
-        # Retrieve the corresponding item from stock (filtering by product name containing a certain substring)
-        item = SHOP2_STOCK_FIX.objects.filter(product_name__iexact=transaction.product_name).first()
-        if item:
-            # Increase the quantity of the item in stock by 1
-            item.quantity += 1
-            item.save()  # Save the changes
-            body = {
-                'id': item.id,
-                'product_name': item.product_name,
-                'price': int(item.price),
-                'quantity': item.quantity,
-            }
-            response = index.update_documents([body])
-            response_data = response.json()
-            print(response_data)
-            # Delete the transaction
-            transaction.delete()
-            cache.delete('SHOP_STOCK')
-            # Return a success response
-            return Response({'message': 'Refund Successful'})
-        else:
-            return Response({'error': 'Item not found in stock'}, status=404)
-    except SAVED_TRANSACTIONS2_FIX.DoesNotExist:
-        # Handle the case where the transaction does not exist
-        return Response({'error': 'Transaction not found'}, status=404)
+        # Handle non-critical operations
+        async def async_operations():
+            try:
+                body = {
+                    'id': item.id,
+                    'product_name': item.product_name,
+                    'price': int(item.price),
+                    'quantity': item.quantity,
+                }
+                index.update_documents([body])
+                await cache.adelete('SHOP_STOCK')
+            except Exception as e:
+                print(f"Error in async operations: {e}")
+
+        # Create background task
+        await asyncio.create_task(async_operations())
+
+        return Response({'message': 'Refund Successful'})
+
     except Exception as e:
-        # Handle any other unexpected errors
         return Response({'error': str(e)}, status=500)
 
 

@@ -5,7 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 import logging
 
-logger = logging.getLogger('django.security')
+logger = logging.getLogger('django')
 
 
 class RefreshTokenView(APIView):
