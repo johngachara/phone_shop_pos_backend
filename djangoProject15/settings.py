@@ -189,7 +189,6 @@ CACHES = {
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'Alltechmanagement.custom_auth.CustomJWTAuthentication',
-        'Alltechmanagement.custom_auth.FirebaseAuthentication'
     ]
 }
 
