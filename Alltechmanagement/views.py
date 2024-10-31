@@ -405,7 +405,7 @@ async def refund2_api(request, id):
                 index.update_documents([body])
                 await cache.adelete('SHOP_STOCK')
             except Exception as e:
-                print(f"Error in async operations: {e}")
+                logging.error(f"Error in async operations: {e}")
 
         # Create background task
         await asyncio.create_task(async_operations())
@@ -413,7 +413,8 @@ async def refund2_api(request, id):
         return Response({'message': 'Refund Successful'})
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        logging.error(f"Error in refund2_api: {str(e)}")
+        return Response({'error': 'An internal error has occurred.'}, status=500)
 
 
 @api_view(['GET'])
@@ -449,7 +450,8 @@ def send_sales2_api(request):
                 return Response("Sale Sent Successfully")
         return Response("No items to send")
     except Exception as e:
-        return Response({'detail': str(e)}, status=500)
+        logging.error(f"Error in send_sales2_api: {str(e)}")
+        return Response({'detail': 'An internal error has occurred.'}, status=500)
 
 
 '''
