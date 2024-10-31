@@ -6,7 +6,7 @@ CacheControl==0.14.0
 cachetools==5.4.0
 camel-converter==3.1.2
 celery==5.4.0
-certifi==2024.2.2
+certifi==2024.07.04
 cffi==1.16.0
 charset-normalizer==3.3.2
 click==8.1.7
@@ -14,8 +14,8 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1
 click-repl==0.3.0
 crispy-bootstrap5==2024.2
-cryptography==42.0.8
-Django==5.0.8
+cryptography==43.0.1
+Django==5.0.9
 django-celery-results==2.5.1
 django-cors-headers==4.3.1
 django-crispy-forms==2.3
@@ -71,7 +71,7 @@ typing_extensions==4.12.2
 tzdata==2024.1
 update==0.0.1
 uritemplate==4.1.1
-urllib3==2.2.1
+urllib3==2.2.2
 vine==5.1.0
 wcwidth==0.2.13
 whitenoise==6.7.0
