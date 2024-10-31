@@ -268,8 +268,9 @@ async def add_stock2_api(request):
             return Response(serializer_data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logging.error(f"Error in add_stock2_api: {e}", exc_info=True)
             return Response(
-                {'error': str(e)},
+                {'error': 'An internal error has occurred.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
