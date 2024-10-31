@@ -312,7 +312,8 @@ async def delete_stock2_api(request, id):
 
         return Response({'status': 'success'}, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({"Error": str(e)})
+        logging.error(f"Error in delete_stock2_api: {e}", exc_info=True)
+        return Response({"Error": "An internal error has occurred."})
 
 
 @async_api_view(['PUT', 'PATCH'])
@@ -359,8 +360,9 @@ async def update_stock2_api(request, id):
         return Response(serializer_data, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logging.error(f"Error in update_stock2_api: {e}", exc_info=True)
         return Response(
-            {"error": str(e)},
+            {"error": "An internal error has occurred."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
