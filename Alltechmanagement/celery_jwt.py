@@ -50,7 +50,7 @@ class CeleryJWTAuthentication(BaseAuthentication):
 
         except (InvalidToken, TokenError) as e:
             logger.error(f"CeleryJWTAuthentication: Error validating token - {str(e)}")
-            raise AuthenticationFailed(str(e))
+            raise AuthenticationFailed("Invalid token")
 
     def authenticate_header(self, request):
         logger.debug("CeleryJWTAuthentication: authenticate_header called")
