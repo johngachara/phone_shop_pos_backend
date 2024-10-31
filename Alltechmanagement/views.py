@@ -386,12 +386,13 @@ async def refund2_api(request, id):
         except SAVED_TRANSACTIONS2_FIX.DoesNotExist:
             return None, 'Transaction not found'
         except Exception as e:
-            return None, str(e)
+            logging.error(f"Error in process_refund: {str(e)}")
+            return None, 'An internal error has occurred.'
 
     try:
         item, error = await process_refund()
         if error:
-            return Response({'error': error}, status=404)
+            return Response({'error': 'An internal error has occurred.'}, status=404)
 
         # Handle non-critical operations
         async def async_operations():
