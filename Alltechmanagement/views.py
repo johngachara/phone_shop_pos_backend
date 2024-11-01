@@ -154,8 +154,9 @@ async def sell_api(request, product_id):
         try:
             product, saved_transaction = await perform_db_operations()
         except ValueError as e:
+            logging.error("A value error occurred: %s", str(e))
             return Response(
-                {'error': str(e)},
+                {'error': 'A value error has occurred!'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
