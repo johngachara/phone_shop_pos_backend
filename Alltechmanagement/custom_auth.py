@@ -66,7 +66,7 @@ class FirebaseAuthentication:
 
         except Exception as e:
             logger.error(f"Firebase token verification failed: {str(e)}")
-            raise AuthenticationFailed(f'Authentication failed: {str(e)}')
+            raise AuthenticationFailed('Authentication failed due to an internal error.')
 
 
 class CustomJWTAuthentication(JWTAuthentication):
