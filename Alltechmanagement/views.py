@@ -196,8 +196,9 @@ async def sell_api(request, product_id):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
+        logging.error("An error occurred: %s", str(e))
         return Response(
-            {'error': str(e)},
+            {'error': 'An internal error has occurred!'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
