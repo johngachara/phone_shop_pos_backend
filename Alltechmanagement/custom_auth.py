@@ -91,4 +91,4 @@ class CustomJWTAuthentication(JWTAuthentication):
 
         except Exception as e:
             logger.error(f"Error getting user from token: {str(e)}")
-            raise AuthenticationFailed(str(e))
+            raise AuthenticationFailed('Authentication failed due to an internal error.')
