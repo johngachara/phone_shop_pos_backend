@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL')]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL'), os.getenv('SERVER_IP')]
 
 # Application definition
 
@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    "django_permissions_policy.PermissionsPolicyMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -66,14 +67,26 @@ MIDDLEWARE = [
     'csp.middleware.CSPMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
-WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
-SECURE_HEADERS = {
-    'Permissions-Policy': (
-        "geolocation=(), camera=(), microphone=(), autoplay=(self), fullscreen=(), "
-        "payment=(), usb=(), gyroscope=(), magnetometer=(), accelerometer=()"
-    )
+PERMISSIONS_POLICY = {
+    "accelerometer": [],
+    "ambient-light-sensor": [],
+    "autoplay": [],
+    "camera": [],
+    "display-capture": [],
+    "document-domain": [],
+    "encrypted-media": [],
+    "fullscreen": [],
+    "geolocation": [],
+    "gyroscope": [],
+    "interest-cohort": [],
+    "magnetometer": [],
+    "microphone": [],
+    "midi": [],
+    "payment": [],
+    "usb": [],
 }
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
+#CORS_ALLOW_ALL_ORIGINS = True  # For development only
 CORS_ALLOW_CREDENTIALS = True
 CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")

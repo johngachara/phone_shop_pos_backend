@@ -1,13 +1,6 @@
 from rest_framework import serializers
 
-from Alltechmanagement.models import SHOP_STOCK_FIX, SAVED_TRANSACTIONS_FIX, SHOP2_STOCK_FIX, SAVED_TRANSACTIONS2_FIX, \
-    HOME_STOCK_FIX
-
-
-class shop1_serializer(serializers.ModelSerializer):
-    class Meta:
-        model = SHOP_STOCK_FIX
-        fields = '__all__'
+from Alltechmanagement.models import SHOP2_STOCK_FIX, SAVED_TRANSACTIONS2_FIX
 
 
 class SellSerializer(serializers.Serializer):
@@ -22,12 +15,6 @@ class DispatchSerializer(serializers.Serializer):
     quantity = serializers.IntegerField()
 
 
-class saved_serializer(serializers.ModelSerializer):
-    class Meta:
-        model = SAVED_TRANSACTIONS_FIX
-        fields = '__all__'
-
-
 class shop2_serializer(serializers.ModelSerializer):
     class Meta:
         model = SHOP2_STOCK_FIX
@@ -37,10 +24,4 @@ class shop2_serializer(serializers.ModelSerializer):
 class saved_serializer2(serializers.ModelSerializer):
     class Meta:
         model = SAVED_TRANSACTIONS2_FIX
-        fields = '__all__'
-
-
-class home_serializer(serializers.ModelSerializer):
-    class Meta:
-        model = HOME_STOCK_FIX
         fields = '__all__'

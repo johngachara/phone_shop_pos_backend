@@ -36,7 +36,6 @@
                         <tr>
                             <td>{{ transaction.product_name }}</td>
                             <td>{{ transaction.selling_price }}</td>
-                            <td>{{ transaction.quantity }}</td>
                             <td>{{ transaction.customer_name }}</td>
                         </tr>
                         {% endfor %}
@@ -44,7 +43,7 @@
                     <tfoot>
                         <tr class="table-footer">
                             <th colspan="3" class="has-text-right">Total:</th>
-                            <th>{{ total }}</th>or your attention to this matte
+                            <th>{{ total }}</th>
                         </tr>
                     </tfoot>
                 </table>

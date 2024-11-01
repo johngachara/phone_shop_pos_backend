@@ -205,7 +205,7 @@ async def sell_api(request, product_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_saved2(request):
-    data = SAVED_TRANSACTIONS2_FIX.objects.all()
+    data = SAVED_TRANSACTIONS2_FIX.objects.order_by('-created_at')
     serializer = saved_serializer2(instance=data, many=True)
     return Response({'data': serializer.data})
 
