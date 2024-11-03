@@ -36,7 +36,7 @@ class BaseFirebaseThrottle(FirebaseUserRateThrottle):
                 self.rate = anon_rate
                 self.num_requests, self.duration = self.parse_rate(self.rate)
             except (KeyError, TypeError):
-                self.rate = '2/minute'  # Default fallback
+                self.rate = '2/hour'  # Default fallback
                 self.num_requests, self.duration = self.parse_rate(self.rate)
         return super().allow_request(request, view)
 

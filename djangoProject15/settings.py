@@ -115,6 +115,7 @@ SECURE_BROWSER_XSS_FILTER = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
+
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 CORS_ALLOW_METHODS = [
     'GET',
@@ -201,10 +202,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'Alltechmanagement.custom_auth.CustomJWTAuthentication',
     ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',  # Only allow JSON responses
+    ],
 
     'DEFAULT_THROTTLE_RATES': {
 
-        'anon': '2/minute',
+        'anon': '2/hour',
         'user': '4/minute',
         'pos_auth': '5/minute',
         'inventory_mod': '30/minute',
