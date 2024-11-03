@@ -68,7 +68,7 @@ style==1.1.0
 supervisor==4.2.5
 tqdm==4.66.4
 typing_extensions==4.12.2
-tzdata==2024.1
+tzdata==2024.2
 update==0.0.1
 uritemplate==4.1.1
 urllib3==2.2.2
