@@ -14,7 +14,7 @@ from django.db import transaction as django_transaction
 from django.db.models import Sum, Count, F, Avg
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from Alltechmanagement.FCMManager import get_ref
@@ -27,6 +27,8 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
     saved_serializer2
+from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
+    OrderManagementThrottle, WeeklyEmailAPIThrottle
 from djangoProject15 import settings
 from django.core.mail import send_mail
 import meilisearch
@@ -84,6 +86,7 @@ def log_db_queries(f):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def get_shop2_stock(request):
     cache_key = 'SHOP_STOCK'
     cached_data = cache.get(cache_key)
@@ -99,6 +102,7 @@ def get_shop2_stock(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def get_shop2_stock_api(request, id):
     cache_key = f'SHOP_STOCK_{id}'
     cached_data = cache.get(cache_key)
@@ -111,6 +115,7 @@ def get_shop2_stock_api(request, id):
 
 
 @async_api_view(['POST'])
+@throttle_classes([SalesOperationsThrottle])
 async def sell_api(request, product_id):
     # Validate serializer
     serializer = SellSerializer(data=request.data)
@@ -205,6 +210,7 @@ async def sell_api(request, product_id):
 
 
 @api_view(['GET'])
+@throttle_classes([InventoryCheckThrottle])
 @permission_classes([IsAuthenticated])
 def get_saved2(request):
     data = SAVED_TRANSACTIONS2_FIX.objects.order_by('-created_at')
@@ -214,6 +220,7 @@ def get_saved2(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([SalesOperationsThrottle])
 def complete_transaction2_api(request, transaction_id):
     with django_transaction.atomic():
         transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=transaction_id)
@@ -230,6 +237,7 @@ def complete_transaction2_api(request, transaction_id):
 
 
 @async_api_view(['POST'])
+@throttle_classes([InventoryModificationThrottle])
 async def add_stock2_api(request):
     if request.method == 'POST':
         data = request.data
@@ -283,6 +291,7 @@ async def add_stock2_api(request):
 
 
 @async_api_view(['DELETE'])
+@throttle_classes([InventoryModificationThrottle])
 async def delete_stock2_api(request, id):
     try:
         @sync_to_async
@@ -320,6 +329,7 @@ async def delete_stock2_api(request, id):
 
 
 @async_api_view(['PUT', 'PATCH'])
+@throttle_classes([InventoryModificationThrottle])
 async def update_stock2_api(request, id):
     @sync_to_async
     def validate_and_update():
@@ -371,6 +381,7 @@ async def update_stock2_api(request, id):
 
 
 @async_api_view(['GET'])
+@throttle_classes([OrderManagementThrottle])
 async def refund2_api(request, id):
     @sync_to_async
     def process_refund():
@@ -426,6 +437,7 @@ async def refund2_api(request, id):
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales2_api(request):
     try:
         data = COMPLETED_TRANSACTIONS2_FIX.objects.all()
@@ -513,22 +525,9 @@ def send_push_notification(request):
         return Response({'error': str(e)}, status=500)'''
 
 
-@api_view(['POST'])
-def store_token(request):
-    token = request.data.get('token')
-    if token:
-        # Check if the token already exists
-        if not PushNotificationToken.objects.filter(token=token).exists():
-            # Store the token in the database
-            PushNotificationToken.objects.create(token=token)
-            return Response({'message': 'Token stored'})
-        else:
-            return Response({'message': 'Token already exists'}, status=400)
-    return Response({'error': 'No token provided'}, status=400)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def admin_dashboard(request):
     # Total Sales Calculation
     total_sales = RECEIPTS2_FIX.objects.aggregate(total_sales=Sum(F('selling_price') * F('quantity')))['total_sales']
@@ -621,6 +620,7 @@ def admin_dashboard(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_sales(request):
     sales = RECEIPTS2_FIX.objects.values(
         'product_name',
@@ -637,6 +637,7 @@ def detailed_sales(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_products(request):
     products = RECEIPTS2_FIX.objects.values('product_name').annotate(
         total_quantity=Sum('quantity')
@@ -649,6 +650,7 @@ def detailed_products(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_customers(request):
     customers = RECEIPTS2_FIX.objects.values('customer_name').annotate(
         total_transactions=Count('id'),
@@ -662,6 +664,7 @@ def detailed_customers(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_low_stock(request):
     threshold = int(request.GET.get('threshold', 3))  # Default threshold is 3
 
@@ -678,6 +681,7 @@ def detailed_low_stock(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def admin_dashboard_shop1(request):
     # Fetch all receipts
     receipts = ref.get()
@@ -752,6 +756,7 @@ def admin_dashboard_shop1(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_sales_shop1(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 100))
@@ -782,6 +787,7 @@ def detailed_sales_shop1(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_products_shop1(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 100))
@@ -808,6 +814,7 @@ def detailed_products_shop1(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def detailed_customers_shop1(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 100))
@@ -836,12 +843,13 @@ def detailed_customers_shop1(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
 def low_stock_items(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 100))
     threshold = int(request.GET.get('threshold', 3))  # Define low stock threshold
 
-    low_ref = db.reference('alltech/LCD')  # Assuming 'LCD' is the name of your table
+    low_ref = db.reference('alltech/LCD')
 
     # Query all items, we'll filter for low stock later
     all_items = ref.order_by_child('quantity').get()
@@ -874,6 +882,7 @@ def low_stock_items(request):
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales_shop1(request):
     try:
         # Reference to your Firebase database
@@ -935,6 +944,7 @@ def send_sales_shop1(request):
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WeeklyEmailAPIThrottle])
 def send_accessories_shop1(request):
     try:
         # Reference to your Firebase database

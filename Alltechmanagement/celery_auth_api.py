@@ -5,12 +5,15 @@ from rest_framework_simplejwt.tokens import RefreshToken
 import logging
 import json
 
+from Alltechmanagement.throttles import CeleryAuthTokenThrottle
 from djangoProject15 import settings
 
 logger = logging.getLogger('scheduler')
 
 
 class CeleryAuthTokenView(APIView):
+    throttle_classes = [CeleryAuthTokenThrottle]
+
     def post(self, request, *args, **kwargs):
         try:
             # Try to parse the JSON data

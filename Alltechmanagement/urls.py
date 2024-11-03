@@ -20,7 +20,6 @@ urlpatterns = [
     path('api/update_stock2/<int:id>', views.update_stock2_api, name='update_stock2_api'),
     path('api/refund2/<int:id>', views.refund2_api, name='refund2_api'),
     path('api/send_sale2', views.send_sales2_api, name='send_sales2_api'),
-    path('api/store_token', views.store_token, name='store_token'),
     path('api/dashboard', views.admin_dashboard, name='dashboard'),
     path('api/detailed/sales/', views.detailed_sales, name='detailed_sales'),
     path('api/detailed/products/', views.detailed_products, name='detailed_products'),

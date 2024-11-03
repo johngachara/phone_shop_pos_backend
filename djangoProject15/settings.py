@@ -57,9 +57,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     "django_permissions_policy.PermissionsPolicyMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.cache.FetchFromCacheMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -202,11 +200,28 @@ CACHES = {
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'Alltechmanagement.custom_auth.CustomJWTAuthentication',
-    ]
+    ],
+
+    'DEFAULT_THROTTLE_RATES': {
+
+        'anon': '2/minute',
+        'user': '4/minute',
+        'pos_auth': '5/minute',
+        'inventory_mod': '30/minute',
+        'sales_ops': '120/minute',
+        'order_mgmt': '60/minute',
+        'inventory_check': '300/minute',
+        'celery_auth_token': '5/day',
+        'weekly_email': '5/day',
+
+    },
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'NUM_PROXIES': 1,
 }
 
-# Cache middleware settings
-CACHE_MIDDLEWARE_KEY_PREFIX = 'alltech_mgmt'
+
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 

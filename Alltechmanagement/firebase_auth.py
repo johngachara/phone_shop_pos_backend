@@ -6,10 +6,14 @@ from firebase_admin import auth
 from .models import AuthorizedFirebaseToken
 import logging
 
+from .throttles import POSAuthThrottle
+
 logger = logging.getLogger('django')
 
 
 class FirebaseAuthTokenView(APIView):
+    throttle_classes = [POSAuthThrottle]
+
     def post(self, request, *args, **kwargs):
         firebase_token = request.data.get('idToken')
         request_ip = request.META.get('HTTP_X_FORWARDED_FOR')

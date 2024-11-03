@@ -1,4 +1,3 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,52 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ heading }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-    <link rel="stylesheet" href="{% static 'css/shop1.css' %}">
 </head>
 <body>
     <section class="section">
         <div class="container">
-            <div class="heading-section">
-                <div class="logo">ALLTECH</div>
+            <div class="has-text-centered mb-6">
+                <div class="is-size-2 has-text-weight-bold mb-3">ALLTECH</div>
                 <h1 class="title is-2">{{ heading }}</h1>
             </div>
             
-            <div class="message">
+            <div class="my-6">
                 <p class="mb-4">Dear Admin,</p>
                 <p>Here are the sales transactions from Shop 1 this week. Please review the details below.</p>
             </div>
 
-            <div class="table-container">
-                <table class="table is-fullwidth is-striped">
-                    <thead>
-                        <tr>
-                            <th>Product Name</th>
-                            <th>Price</th>
-                            <th>Quantity</th>
-                            <th>Customer</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for transaction in transactions %}
-                        <tr>
-                            <td>{{ transaction.product_name }}</td>
-                            <td>{{ transaction.selling_price }}</td>
-                            <td>{{ transaction.customer_name }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr class="table-footer">
-                            <th colspan="3" class="has-text-right">Total:</th>
-                            <th>{{ total }}</th>
-                        </tr>
-                    </tfoot>
-                </table>
+            <div class="box p-0">
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Price</th>
+                                <th>Customer</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.product_name }}</td>
+                                <td>{{ transaction.selling_price }}</td>
+                                <td>{{ transaction.customer_name }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="has-background-light">
+                                <th colspan="2" class="has-text-right">Total:</th>
+                                <th>{{ total }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
 
-            <div class="message">
+            <div class="my-6">
                 <p class="mb-4">Thank you.</p>
-                <p class="signature">AllTech Management</p>
+                <p class="is-italic">AllTech Management</p>
             </div>
         </div>
     </section>
