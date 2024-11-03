@@ -27,7 +27,7 @@ firebase-admin==6.5.0
 google-ai-generativelanguage==0.6.6
 google-api-core==2.19.1
 google-api-python-client==2.137.0
-google-auth==2.32.0
+google-auth==2.35.0
 google-auth-httplib2==0.2.0
 google-cloud-core==2.4.1
 google-cloud-firestore==2.16.1
