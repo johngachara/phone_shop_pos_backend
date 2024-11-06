@@ -1,6 +1,7 @@
 import os
 from functools import wraps
 from asgiref.sync import sync_to_async
+from django_ratelimit.decorators import ratelimit
 from dotenv import load_dotenv
 from collections import defaultdict
 from datetime import timedelta, datetime
@@ -28,7 +29,7 @@ from django.shortcuts import render
 from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
     saved_serializer2
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
-    OrderManagementThrottle, WeeklyEmailAPIThrottle
+    OrderManagementThrottle, WeeklyEmailAPIThrottle, POSAuthThrottle
 from djangoProject15 import settings
 from django.core.mail import send_mail
 import meilisearch
@@ -59,6 +60,7 @@ def async_api_view(methods):
     return decorator
 
 
+@ratelimit(key='ip', rate='5/h')
 def landing(request):
     return render(request, 'landing.html')
 
