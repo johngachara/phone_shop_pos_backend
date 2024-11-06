@@ -155,7 +155,8 @@ WSGI_APPLICATION = 'djangoProject15.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-RATELIMIT_IP_META_KEY = 'HTTP_X_FORWARDED_FOR'
+RATELIMIT_IP_META_KEY = lambda request: request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0] or request.META.get('REMOTE_ADDR')
+
 
 # settings.py
 
