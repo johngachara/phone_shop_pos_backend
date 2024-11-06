@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL'), os.getenv('SERVER_IP')]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('CLOUDFRONT'), os.getenv('SERVER_URL'), os.getenv('SERVER_IP')]
 
 # Application definition
 
@@ -224,7 +224,6 @@ REST_FRAMEWORK = {
     ],
     'NUM_PROXIES': 1,
 }
-
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
