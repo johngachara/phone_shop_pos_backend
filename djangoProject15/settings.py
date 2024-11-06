@@ -155,6 +155,7 @@ WSGI_APPLICATION = 'djangoProject15.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+RATELIMIT_IP_META_KEY = 'HTTP_X_FORWARDED_FOR'
 
 # settings.py
 
