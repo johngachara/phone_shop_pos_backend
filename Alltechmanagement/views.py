@@ -269,7 +269,8 @@ async def add_stock2_api(request):
             # Handle non-critical operations
             async def async_operations():
                 try:
-                    index.add_documents(body)
+                    result = index.add_documents(body)
+                    logger.info(result)
                     await cache.adelete('SHOP_STOCK')
                 except Exception as e:
                     print(f"Error in async operations: {e}")
