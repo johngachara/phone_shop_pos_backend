@@ -44,7 +44,7 @@ idna==3.7
 kombu==5.3.7
 meilisearch==0.31.4
 msgpack==1.0.8
-packaging==24.1
+packaging==24.2
 prompt-toolkit==3.0.43
 proto-plus==1.24.0
 protobuf==4.25.3
