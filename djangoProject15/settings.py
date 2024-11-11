@@ -42,8 +42,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'Alltechmanagement.apps.AlltechmanagementConfig',
-    'crispy_forms',
-    'crispy_bootstrap5',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
