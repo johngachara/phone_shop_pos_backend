@@ -1,6 +1,7 @@
 import os
 from functools import wraps
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ObjectDoesNotExist
 from django_ratelimit.decorators import ratelimit
 from dotenv import load_dotenv
 from collections import defaultdict
@@ -225,24 +226,25 @@ def get_saved2(request):
 @throttle_classes([SalesOperationsThrottle])
 def complete_transaction2_api(request, transaction_id):
     with django_transaction.atomic():
+        # Fetch the transaction details
         transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=transaction_id)
         transaction_name = transaction.product_name
         transaction_quantity = transaction.quantity
         transaction_price = transaction.selling_price
         transaction_customer = transaction.customer_name.lower()
 
-        # Find or create the customer in the LcdCustomers table
-        customer, created = LcdCustomers.objects.get_or_create(
-            customer_name=transaction_customer,
-            defaults={
-                'total_spent': transaction_price * transaction_quantity
-            }
-        )
-
-        if not created:
+        try:
+            # Try to get the customer
+            customer = LcdCustomers.objects.get(customer_name=transaction_customer)
             # Update the customer's total spent
             customer.total_spent += transaction_price * transaction_quantity
             customer.save()
+        except ObjectDoesNotExist:
+            # Customer not found, create a new customer entry
+            customer = LcdCustomers.objects.create(
+                customer_name=transaction_customer,
+                total_spent=transaction_price * transaction_quantity
+            )
 
         # Create the completed transaction and receipt
         COMPLETED_TRANSACTIONS2_FIX.objects.create(
@@ -262,7 +264,6 @@ def complete_transaction2_api(request, transaction_id):
         transaction.delete()
 
         return Response('Completed transaction', status=200)
-
 @async_api_view(['POST'])
 @throttle_classes([InventoryModificationThrottle])
 async def add_stock2_api(request):
