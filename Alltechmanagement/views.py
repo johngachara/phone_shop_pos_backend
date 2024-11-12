@@ -23,11 +23,11 @@ from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
 from Alltechmanagement.models import SHOP2_STOCK_FIX, \
     SAVED_TRANSACTIONS2_FIX, \
-    COMPLETED_TRANSACTIONS2_FIX, RECEIPTS2_FIX, PushNotificationToken
+    COMPLETED_TRANSACTIONS2_FIX, RECEIPTS2_FIX, PushNotificationToken, LcdCustomers
 from django.http import JsonResponse
 from django.shortcuts import render
 from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
-    saved_serializer2
+    saved_serializer2, LcdCustomerSerializer
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
     OrderManagementThrottle, WeeklyEmailAPIThrottle, POSAuthThrottle
 from djangoProject15 import settings
@@ -229,14 +229,39 @@ def complete_transaction2_api(request, transaction_id):
         transaction_name = transaction.product_name
         transaction_quantity = transaction.quantity
         transaction_price = transaction.selling_price
-        transaction_customer = transaction.customer_name
-        COMPLETED_TRANSACTIONS2_FIX.objects.create(product_name=transaction_name, selling_price=transaction_price,
-                                                   quantity=transaction_quantity, customer_name=transaction_customer)
-        RECEIPTS2_FIX.objects.create(product_name=transaction_name, selling_price=transaction_price,
-                                     quantity=transaction_quantity, customer_name=transaction_customer)
-        transaction.delete()
-        return Response('Completed transaction', status=200)
+        transaction_customer = transaction.customer_name.lower()
 
+        # Find or create the customer in the LcdCustomers table
+        customer, created = LcdCustomers.objects.get_or_create(
+            customer_name=transaction_customer,
+            defaults={
+                'total_spent': transaction_price * transaction_quantity
+            }
+        )
+
+        if not created:
+            # Update the customer's total spent
+            customer.total_spent += transaction_price * transaction_quantity
+            customer.save()
+
+        # Create the completed transaction and receipt
+        COMPLETED_TRANSACTIONS2_FIX.objects.create(
+            product_name=transaction_name,
+            selling_price=transaction_price,
+            quantity=transaction_quantity,
+            customer_name=transaction_customer
+        )
+        RECEIPTS2_FIX.objects.create(
+            product_name=transaction_name,
+            selling_price=transaction_price,
+            quantity=transaction_quantity,
+            customer_name=transaction_customer
+        )
+
+        # Delete the saved transaction
+        transaction.delete()
+
+        return Response('Completed transaction', status=200)
 
 @async_api_view(['POST'])
 @throttle_classes([InventoryModificationThrottle])
@@ -1012,3 +1037,12 @@ def custom_404(request, exception):
 
 def custom_500(request):
     return render(request, '500.html', status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([InventoryCheckThrottle])
+def get_customers(request):
+    customers = LcdCustomers.objects.all()
+    serializer = LcdCustomerSerializer(customers, many=True)
+    return Response(serializer.data)

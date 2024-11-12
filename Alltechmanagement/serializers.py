@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from Alltechmanagement.models import SHOP2_STOCK_FIX, SAVED_TRANSACTIONS2_FIX
+from Alltechmanagement.models import SHOP2_STOCK_FIX, SAVED_TRANSACTIONS2_FIX, LcdCustomers
 
 
 class SellSerializer(serializers.Serializer):
@@ -25,3 +25,9 @@ class saved_serializer2(serializers.ModelSerializer):
     class Meta:
         model = SAVED_TRANSACTIONS2_FIX
         fields = '__all__'
+
+
+class LcdCustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LcdCustomers
+        fields = ['customer_name']

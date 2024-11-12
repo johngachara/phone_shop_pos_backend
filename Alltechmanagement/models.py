@@ -68,3 +68,8 @@ class AuthorizedFirebaseToken(models.Model):
 
     def __str__(self):
         return self.token
+
+
+class LcdCustomers(models.Model):
+    customer_name = models.CharField(max_length=255, unique=True)
+    total_spent =  models.DecimalField(max_digits=12, decimal_places=2)

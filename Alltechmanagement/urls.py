@@ -33,4 +33,5 @@ urlpatterns = [
     path('api/shop1/send_sale', views.send_sales_shop1, name='shop1_sale'),
     path('api/shop1/send_accessories', views.send_accessories_shop1, name='shop1_accessories'),
     path('api/celery-token/', CeleryAuthTokenView.as_view(), name='celery_token'),
+    path('api/customers/',views.get_customers, name='get_customers'),
 ]
