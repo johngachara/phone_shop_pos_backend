@@ -88,8 +88,8 @@ CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_STYLE_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_IMG_SRC = (
-    "'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com", "https://source.unsplash.com")
-CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com")
+    "'self'", "https://cdn.jsdelivr.net", "https://cdn-icons-png.flaticon.com")
+CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 CSP_FRAME_SRC = ("'none'",)
 CSP_OBJECT_SRC = ("'none'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
@@ -102,7 +102,6 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
 
 ]
-
 # HSTS settings
 SECURE_SSL_REDIRECT = True
 SECURE_HSTS_SECONDS = 31536000  # 1 year
@@ -113,7 +112,6 @@ SECURE_BROWSER_XSS_FILTER = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
-
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 CORS_ALLOW_METHODS = [
     'GET',
