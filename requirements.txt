@@ -60,7 +60,7 @@ redis==5.2.0
 requests==2.32.3
 rsa==4.9
 six==1.16.0
-sqlparse==0.5.1
+sqlparse==0.5.2
 typing_extensions==4.12.2
 tzdata==2024.2
 uritemplate==4.1.1
