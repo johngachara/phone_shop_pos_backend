@@ -36,7 +36,7 @@ google-cloud-storage==2.18.2
 google-crc32c==1.6.0
 google-resumable-media==2.7.2
 googleapis-common-protos==1.65.0
-grpcio==1.67.1
+grpcio==1.68.0
 grpcio-status==1.67.1
 httplib2==0.22.0
 idna==3.10
