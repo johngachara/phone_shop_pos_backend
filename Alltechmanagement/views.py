@@ -1047,10 +1047,3 @@ def get_customers(request):
     return Response(serializer.data)
 
 
-def show_html(request):
-    ref = db.reference('alltech/')
-    completed_ref = ref.child('Complete')
-    # Get completed transactions
-    data = completed_ref.get()
-    total = sum(float(transaction['price']) for transaction in data.values())
-    return render(request,'shop2_sales.html',{'heading':'sales','transactions' : data.values(),'total':total})
