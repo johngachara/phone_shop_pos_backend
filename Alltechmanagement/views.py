@@ -473,8 +473,6 @@ def send_sales2_api(request):
         if data.exists():
             total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
             with django_transaction.atomic():
-                saved = SAVED_TRANSACTIONS2_FIX.objects.all()
-
                 # Render the HTML email content using Django templates
                 completed_transactions_html = render_to_string('completed_transactions.html', {
                     'transactions': data,
@@ -1047,3 +1045,12 @@ def get_customers(request):
     customers = LcdCustomers.objects.all()
     serializer = LcdCustomerSerializer(customers, many=True)
     return Response(serializer.data)
+
+
+def show_html(request):
+    ref = db.reference('alltech/')
+    completed_ref = ref.child('Complete')
+    # Get completed transactions
+    data = completed_ref.get()
+    total = sum(float(transaction['price']) for transaction in data.values())
+    return render(request,'shop2_sales.html',{'heading':'sales','transactions' : data.values(),'total':total})
