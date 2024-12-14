@@ -1,5 +1,7 @@
 import os
 from functools import wraps
+from io import BytesIO
+
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
 from django_ratelimit.decorators import ratelimit
@@ -32,11 +34,11 @@ from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
     OrderManagementThrottle, WeeklyEmailAPIThrottle, POSAuthThrottle
 from djangoProject15 import settings
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
 import meilisearch
 import logging
 from firebase_admin import db
-
+from xhtml2pdf import pisa
 load_dotenv()
 ref = get_ref()
 client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH_KEY'))
@@ -469,34 +471,50 @@ async def refund2_api(request, id):
 @throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales2_api(request):
     try:
-        data = COMPLETED_TRANSACTIONS2_FIX.objects.all()
-        if data.exists():
-            total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
-            with django_transaction.atomic():
-                # Render the HTML email content using Django templates
-                completed_transactions_html = render_to_string('completed_transactions.html', {
-                    'transactions': data,
-                    'total': total,
-                    'heading': 'Shop 2 Sales',
-                })
-                # Get the plain text version of the email content
-                completed_transactions_text = strip_tags(completed_transactions_html)
-                sender_email = settings.EMAIL_HOST_USER
-                recipient_email = os.getenv('GMAIL_RECEIVER')
-                # Send the completed transactions email
-                send_mail(
-                    'Shop 2 Sales',
-                    completed_transactions_text,
-                    sender_email,
-                    [recipient_email],
-                    html_message=completed_transactions_html,
-                )
-                data.delete()
-                return Response("Sale Sent Successfully")
-        return Response("No items to send")
+        # Fetch completed transactions
+        transactions = COMPLETED_TRANSACTIONS2_FIX.objects.all()
+        total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
+
+        if not transactions.exists():
+            return Response('No completed transactions available.', status=404)
+
+        # Render the HTML template
+        html_content = render_to_string('completed_transactions.html', {
+            'transactions': transactions,
+            'total': total,
+            'heading': 'Shop 2 Sales',
+        })
+
+        # Generate PDF from HTML
+        pdf_file = BytesIO()
+        pisa_status = pisa.CreatePDF(html_content, dest=pdf_file)
+
+        if pisa_status.err:
+            return Response('Failed to generate PDF.', status=500)
+
+        # Prepare email
+        sender_email = settings.EMAIL_HOST_USER
+        recipient_email = os.getenv('GMAIL_RECEIVER')
+        email = EmailMessage(
+            subject="Shop 2 Sales Report",
+            body="Attached is the completed transactions PDF report.",
+            from_email=sender_email,
+            to=[recipient_email],
+        )
+
+        # Attach PDF
+        email.attach('Shop2_Completed_Transactions.pdf', pdf_file.getvalue(), 'application/pdf')
+
+        # Send email
+        email.send()
+
+        # Delete the transactions after sending the email
+        transactions.delete()
+
+        return Response("Email with PDF sent successfully!")
     except Exception as e:
-        logging.error(f"Error in send_sales2_api: {str(e)}")
-        return Response({'detail': 'An internal error has occurred.'}, status=500)
+        logging.error(f"Error in send_completed_transactions_email: {str(e)}")
+        return Response('An internal error occurred.', status=500)
 
 
 '''
@@ -1046,4 +1064,50 @@ def get_customers(request):
     serializer = LcdCustomerSerializer(customers, many=True)
     return Response(serializer.data)
 
+@api_view(['GET'])
+def send_completed_transactions_email(request):
+    try:
+        # Fetch completed transactions
+        transactions = COMPLETED_TRANSACTIONS2_FIX.objects.all()
+        total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
 
+        if not transactions.exists():
+            return Response('No completed transactions available.', status=404)
+
+        # Render the HTML template
+        html_content = render_to_string('completed_transactions.html', {
+            'transactions': transactions,
+            'total': total,
+            'heading': 'Shop 2 Sales',
+        })
+
+        # Generate PDF from HTML
+        pdf_file = BytesIO()
+        pisa_status = pisa.CreatePDF(html_content, dest=pdf_file)
+
+        if pisa_status.err:
+            return Response('Failed to generate PDF.', status=500)
+
+        # Prepare email
+        sender_email = settings.EMAIL_HOST_USER
+        recipient_email = os.getenv('GMAIL_RECEIVER')
+        email = EmailMessage(
+            subject="Shop 2 Sales Report",
+            body="Attached is the completed transactions PDF report.",
+            from_email=sender_email,
+            to=[recipient_email],
+        )
+
+        # Attach PDF
+        email.attach('Shop2_Completed_Transactions.pdf', pdf_file.getvalue(), 'application/pdf')
+
+        # Send email
+        email.send()
+
+        # Delete the transactions after sending the email
+        transactions.delete()
+
+        return Response("Email with PDF sent successfully!")
+    except Exception as e:
+        logging.error(f"Error in send_completed_transactions_email: {str(e)}")
+        return Response('An internal error occurred.', status=500)
