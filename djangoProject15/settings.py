@@ -159,7 +159,7 @@ RATELIMIT_IP_META_KEY = lambda request: request.META.get('HTTP_X_FORWARDED_FOR',
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_CRED'),
+        'NAME': 'postgres',
         'USER': os.getenv('DB_CRED'),
         'PASSWORD': os.getenv('DB_PASS'),
         'HOST': os.getenv('DB_HOST'),
