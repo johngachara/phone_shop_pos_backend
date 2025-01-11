@@ -97,6 +97,7 @@ CSP_CONNECT_SRC = ("'self'",)
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
     'https://main.gachara.store',
+    'https://admin.gachara.store',
     'http://localhost:3000',
     'http://localhost:5173',
 
