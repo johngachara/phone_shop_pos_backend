@@ -1,11 +1,15 @@
 from django.urls import path
 from . import views
 from django.conf.urls import handler404, handler500
+
+from .admin_apis import main_dashboard, weekly_analysis, monthly_analysis, yearly_analysis, customer_insights, \
+    product_insights, sales_patterns
 from .celery_auth_api import CeleryAuthTokenView
 from .firebase_auth import FirebaseAuthTokenView
 from .refresh_token_view import RefreshTokenView
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
+
 urlpatterns = [
     path('', views.landing, name='landing'),
     path('api/firebase-auth/', FirebaseAuthTokenView.as_view(), name='firebase-auth'),
@@ -20,18 +24,14 @@ urlpatterns = [
     path('api/update_stock2/<int:id>', views.update_stock2_api, name='update_stock2_api'),
     path('api/refund2/<int:id>', views.refund2_api, name='refund2_api'),
     path('api/send_sale2', views.send_sales2_api, name='send_sales2_api'),
-    path('api/dashboard', views.admin_dashboard, name='dashboard'),
-    path('api/detailed/sales/', views.detailed_sales, name='detailed_sales'),
-    path('api/detailed/products/', views.detailed_products, name='detailed_products'),
-    path('api/detailed/customers/', views.detailed_customers, name='detailed_customers'),
     path('api/detailed/low_stock/', views.detailed_low_stock, name='detailed_lowstock'),
-    path('api/shop1/dashboard/', views.admin_dashboard_shop1, name='detailed_customers'),
-    path('api/shop1/detailed/sales/', views.detailed_sales_shop1, name='detailed_sales_shop1'),
-    path('api/shop1/detailed/products/', views.detailed_products_shop1, name='detailed_products_shop1'),
-    path('api/shop1/detailed/customers/', views.detailed_customers_shop1, name='detailed_customers_shop1'),
-    path('api/shop1/detailed/lowstock/', views.low_stock_items, name='low_stock_items'),
-    path('api/shop1/send_sale', views.send_sales_shop1, name='shop1_sale'),
-    path('api/shop1/send_accessories', views.send_accessories_shop1, name='shop1_accessories'),
     path('api/celery-token/', CeleryAuthTokenView.as_view(), name='celery_token'),
     path('api/customers/',views.get_customers, name='get_customers'),
+    path('api/dashboard/', main_dashboard, name='main-dashboard'),
+    path('api/weekly/', weekly_analysis, name='weekly-analysis'),
+    path('api/monthly/', monthly_analysis, name='monthly-analysis'),
+    path('api/yearly/', yearly_analysis, name='yearly-analysis'),
+    path('api/customers-insights/', customer_insights, name='customer-insights'),
+    path('api/products-insights/', product_insights, name='product-insights'),
+    path('api/patterns/', sales_patterns, name='sales-patterns'),
 ]

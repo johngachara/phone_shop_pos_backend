@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from firebase_admin import auth
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework.exceptions import AuthenticationFailed
@@ -29,44 +28,7 @@ class CustomUser:
         return self.firebase_uid
 
 
-class FirebaseAuthentication:
-    """
-    Custom authentication class that verifies Firebase ID tokens and
-    attaches a CustomUser instance to the request if successful.
-    """
 
-    def authenticate(self, request):
-        # Get the 'Authorization' header from the request
-        auth_header = request.headers.get('Authorization')
-        logger.debug('Checking Authorization header')
-
-        if not auth_header:
-            logger.debug("No Authorization header found")
-            return None
-
-        if not auth_header.startswith('Bearer '):
-            logger.error("Authorization header format is invalid")
-            raise AuthenticationFailed('Invalid Authorization header format')
-
-        # Extract the token from the Authorization header
-        token = auth_header.split(' ')[1]
-
-        try:
-            # Verify the Firebase token
-            decoded_token = auth.verify_id_token(token)
-            firebase_uid = decoded_token.get('uid')
-
-            if not firebase_uid:
-                raise AuthenticationFailed('Invalid Firebase token: No UID found')
-
-            user = CustomUser(firebase_uid=firebase_uid)
-            logger.info(f"Successfully authenticated user: {firebase_uid}")
-
-            return (user, None)  # Returning user and None (no credentials)
-
-        except Exception as e:
-            logger.error(f"Firebase token verification failed: {str(e)}")
-            raise AuthenticationFailed('Authentication failed due to an internal error.')
 
 
 class CustomJWTAuthentication(JWTAuthentication):

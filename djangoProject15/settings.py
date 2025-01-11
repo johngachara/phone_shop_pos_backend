@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL'), os.getenv('SERVER_IP')]
 
@@ -97,8 +97,8 @@ CSP_CONNECT_SRC = ("'self'",)
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
     'https://main.gachara.store',
-    'https://shop1.gachara.store',
     'http://localhost:3000',
+    'http://localhost:5173',
 
 ]
 # HSTS settings
@@ -248,8 +248,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 ]'''
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-#DJANGO_ALLOW_ASYNC_UNSAFE = True  # Only in development
-ASGI_APPLICATION = 'djangoProject15.asgi.application'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -307,3 +305,4 @@ LOGGING = {
         },
     },
 }
+
