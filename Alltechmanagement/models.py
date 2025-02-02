@@ -9,7 +9,7 @@ from django.utils import timezone
 
 #NEW SYSTEM
 class SHOP2_STOCK_FIX(models.Model):
-    product_name = models.CharField(max_length=30, unique=True)
+    product_name = models.CharField(max_length=100, unique=True)
     quantity = models.IntegerField()
     price = models.DecimalField(decimal_places=2, max_digits=7)
 
@@ -18,7 +18,7 @@ class SHOP2_STOCK_FIX(models.Model):
 
 
 class SAVED_TRANSACTIONS2_FIX(models.Model):
-    product_name = models.CharField(max_length=20)
+    product_name = models.CharField(max_length=100)
     selling_price = models.DecimalField(max_digits=7, decimal_places=2)
     quantity = models.IntegerField()
     customer_name = models.CharField(max_length=255, default='null')
@@ -34,7 +34,7 @@ class SAVED_TRANSACTIONS2_FIX(models.Model):
 
 
 class COMPLETED_TRANSACTIONS2_FIX(models.Model):
-    product_name = models.CharField(max_length=20)
+    product_name = models.CharField(max_length=100)
     selling_price = models.DecimalField(max_digits=7, decimal_places=2)
     quantity = models.IntegerField()
     customer_name = models.CharField(max_length=255, default='null')

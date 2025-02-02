@@ -6,17 +6,12 @@ from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
 from django_ratelimit.decorators import ratelimit
 from dotenv import load_dotenv
-from collections import defaultdict
-from datetime import timedelta, datetime
 from django.core.cache import cache
 import asyncio
 import time
-from django.db.models.functions import ExtractHour, TruncDate, ExtractMonth, ExtractYear, Lower
 from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 from django.db import transaction as django_transaction
-from django.db.models import Sum, Count, F, Avg
-from django.utils import timezone
+from django.db.models import Sum, F
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
@@ -26,18 +21,16 @@ from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
 from Alltechmanagement.models import SHOP2_STOCK_FIX, \
     SAVED_TRANSACTIONS2_FIX, \
-    COMPLETED_TRANSACTIONS2_FIX, RECEIPTS2_FIX, PushNotificationToken, LcdCustomers
-from django.http import JsonResponse
+    COMPLETED_TRANSACTIONS2_FIX, RECEIPTS2_FIX, LcdCustomers
 from django.shortcuts import render
 from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
     saved_serializer2, LcdCustomerSerializer
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
-    OrderManagementThrottle, WeeklyEmailAPIThrottle, POSAuthThrottle
+    OrderManagementThrottle, WeeklyEmailAPIThrottle
 from djangoProject15 import settings
-from django.core.mail import send_mail, EmailMessage
+from django.core.mail import  EmailMessage
 import meilisearch
 import logging
-from firebase_admin import db
 from xhtml2pdf import pisa
 load_dotenv()
 ref = get_ref()

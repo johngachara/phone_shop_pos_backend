@@ -25,6 +25,11 @@ class ClerkAuthentication(BaseAuthentication):
 
     def authenticate(self, request):
         auth_header = request.headers.get('Authorization')
+        request_ip = request.META.get('HTTP_X_FORWARDED_FOR')
+        if request_ip:
+            request_ip = request_ip.split(',')[0]
+        else:
+            request_ip = request.META.get('REMOTE_ADDR')
         if not auth_header or not auth_header.startswith('Bearer '):
             raise AuthenticationFailed('No valid authorization token provided')
 
@@ -52,7 +57,7 @@ class ClerkAuthentication(BaseAuthentication):
                 raise AuthenticationFailed(f'Clerk API error')
 
         except Exception as e:
-            logger.error(str(e))
+            logger.error(f"Auth failed from IP {request_ip}: {str(e)}")
             raise AuthenticationFailed(f'Authentication failed')
 
     def authenticate_header(self, request):
