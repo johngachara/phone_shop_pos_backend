@@ -22,7 +22,22 @@ class FirebaseUserRateThrottle(UserRateThrottle):
             }
         logger.warning('Unauthenticated request or missing firebase_uid')
         return super().get_cache_key(request, view)
+class ClerkUserRateThrottle(UserRateThrottle):
+    """
+    Custom UserRateThrottle that uses clerk.data.id as the unique identifier for rate limiting.
+    Includes additional logging for security monitoring.
+    """
 
+    def get_cache_key(self, request, view):
+        if request.user and request.user.is_authenticated and hasattr(request.user, 'data'):
+            ident = request.user.data.id
+            logger.info(f'Rate limiting for Clerk user: {ident}')
+            return self.cache_format % {
+                'scope': self.scope,
+                'ident': ident
+            }
+        logger.warning('Unauthenticated request or missing firebase_uid')
+        return super().get_cache_key(request, view)
 
 class BaseFirebaseThrottle(FirebaseUserRateThrottle):
     """
@@ -51,6 +66,40 @@ class BaseFirebaseThrottle(FirebaseUserRateThrottle):
 
         ident = request.user.firebase_uid
         logger.info(f'Rate limiting for Firebase user: {ident}')
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': ident
+        }
+
+
+
+class BaseClerkThrottle(ClerkUserRateThrottle):
+    """
+    Base throttle class for clerk authentication with anonymous fallback
+    """
+
+    def allow_request(self, request, view):
+        if not request.user.is_authenticated or not hasattr(request.user.data, 'id'):
+            try:
+                anon_rate = settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['anon']
+                self.rate = anon_rate
+                self.num_requests, self.duration = self.parse_rate(self.rate)
+            except (KeyError, TypeError):
+                self.rate = '2/hour'  # Default fallback
+                self.num_requests, self.duration = self.parse_rate(self.rate)
+        return super().allow_request(request, view)
+
+    def get_cache_key(self, request, view):
+        if not request.user.is_authenticated or not hasattr(request.user.data, 'id'):
+            ident = self.get_ident(request)
+            logger.warning('Unauthenticated request or missing clerk_id')
+            return self.cache_format % {
+                'scope': f"anon_{self.scope}",
+                'ident': ident
+            }
+
+        ident = request.user.data.id
+        logger.info(f'Rate limiting for Clerk user: {ident}')
         return self.cache_format % {
             'scope': self.scope,
             'ident': ident
@@ -101,6 +150,14 @@ class InventoryCheckThrottle(BaseFirebaseThrottle):
     rate = '300/minute'
     scope = 'inventory_check'
 
+
+class DashBoardThrottle(BaseClerkThrottle):
+    """
+    For admin dashboard apis
+    20 queries per second
+    """
+    rate = '20/second'
+    scope = 'dashboard'
 
 class CeleryAuthTokenThrottle(SimpleRateThrottle):
     """

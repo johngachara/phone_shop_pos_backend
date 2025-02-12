@@ -1,4 +1,3 @@
-# firebase_utils.py
 import os
 
 import firebase_admin

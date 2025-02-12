@@ -17,6 +17,7 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from Alltechmanagement.FCMManager import get_ref
+from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
 from Alltechmanagement.models import SHOP2_STOCK_FIX, \
@@ -69,7 +70,7 @@ def log_db_queries(f):
         res = f(*args, **kwargs)
         print("\n\n")
         print("-" * 80)
-        print("db queries log for %s:\n" % (f.__name__))
+        print("db queries log for %s:\n" % f.__name__)
         print(" TOTAL COUNT : % s " % len(connection.queries))
         for q in connection.queries:
             print("%s: %s\n" % (q["time"], q["sql"]))
@@ -237,7 +238,7 @@ def complete_transaction2_api(request, transaction_id):
             customer.save()
         except ObjectDoesNotExist:
             # Customer not found, create a new customer entry
-            customer = LcdCustomers.objects.create(
+            LcdCustomers.objects.create(
                 customer_name=transaction_customer,
                 total_spent=transaction_price * transaction_quantity
             )
@@ -255,7 +256,8 @@ def complete_transaction2_api(request, transaction_id):
             quantity=transaction_quantity,
             customer_name=transaction_customer
         )
-
+        # Clear dashboard caches
+        invalidate_dashboard_caches()
         # Delete the saved transaction
         transaction.delete()
 
@@ -333,7 +335,7 @@ async def delete_stock2_api(request, id):
                 return data_copy
 
         # Delete from database
-        deleted_data = await delete_from_db()
+        await delete_from_db()
 
         # Handle non-critical operations
         async def async_operations():

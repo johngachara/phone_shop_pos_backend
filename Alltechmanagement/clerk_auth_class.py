@@ -51,7 +51,7 @@ class ClerkAuthentication(BaseAuthentication):
                 user = self.clerk.users.get(user_id=user_id)
                 if not user:
                     raise AuthenticationFailed('User not found')
-                return (ClerkUser(user), token)
+                return ClerkUser(user), token
             except Exception as clerk_error:
                 logger.error(str(clerk_error))
                 raise AuthenticationFailed(f'Clerk API error')

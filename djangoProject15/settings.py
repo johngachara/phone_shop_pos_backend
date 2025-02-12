@@ -216,7 +216,7 @@ REST_FRAMEWORK = {
         'inventory_check': '300/minute',
         'celery_auth_token': '5/day',
         'weekly_email': '5/day',
-
+        'dashboard': '20/second',
     },
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
