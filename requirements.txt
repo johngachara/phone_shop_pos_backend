@@ -20,7 +20,7 @@ click==8.1.7
 click-didyoumean==0.3.1
 click-plugins==1.1.1
 click-repl==0.3.0
-cryptography==43.0.3
+cryptography==44.0.1
 cssselect2==0.7.0
 Django==5.1.5
 django-celery-results==2.5.1
@@ -104,4 +104,4 @@ wcwidth==0.2.13
 webauthn==2.4.0
 webencodings==0.5.1
 whitenoise==6.8.2
-xhtml2pdf==0.2.16
+xhtml2pdf==0.2.17
