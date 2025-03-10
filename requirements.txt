@@ -35,7 +35,7 @@ djangorestframework_simplejwt==5.4.0
 eval_type_backport==0.2.2
 firebase-admin==6.6.0
 google-api-core==2.24.1
-google-api-python-client==2.160.0
+google-api-python-client==2.163.0
 google-auth==2.36.0
 google-auth-httplib2==0.2.0
 google-cloud-core==2.4.1
