@@ -1,7 +1,8 @@
 import os
+from datetime import datetime, timedelta
 from functools import wraps
 from io import BytesIO
-
+from django.utils import timezone
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
 from django_ratelimit.decorators import ratelimit
@@ -17,6 +18,7 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from Alltechmanagement.FCMManager import get_ref
+from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
@@ -599,3 +601,83 @@ def get_customers(request):
     customers = LcdCustomers.objects.all()
     serializer = LcdCustomerSerializer(customers, many=True)
     return Response(serializer.data)
+
+@api_view(['GET'])
+@authentication_classes([CeleryJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_daily_ai_insights(request):
+    try:
+
+        yesterday = datetime.now() - timedelta(days=1)
+        data = RECEIPTS2_FIX.objects.filter(created_at__date=yesterday)
+
+        if data.exists():
+            user_prompt = f"""
+            Analyze the transactions that happened on {yesterday.strftime("%B %d, %Y")}.
+
+            Tasks:
+            - Summarize number of sales and total revenue.
+            - Identify best-selling and highest revenue products.
+            - Report products that are low in stock after sales.
+            - Suggest improvements or immediate actions if necessary.
+            Format nicely in sections with bullet points.
+            """
+
+            # If there is transaction data, run AI insights
+            response_text = run_conversation(user_prompt)
+            return Response({"message": response_text}, status=status.HTTP_200_OK)
+        else:
+            # If no data, respond gracefully
+            return Response(
+                {"error": "No transactions found for analysis."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    except Exception as e:
+        logging.error(f"Error in get_daily_ai_insights: {str(e)}")
+        return Response(
+            {"error": "An internal error has occurred."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@authentication_classes([CeleryJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_weekly_ai_insights(request):
+    try:
+        today = timezone.now().date()
+        current_week = today - timedelta(days=today.weekday())  # Monday of this week
+
+        # Fetch transactions for the current week
+        data = RECEIPTS2_FIX.objects.filter(created_at__date__gte=current_week)
+
+        if data.exists():
+            # If there is transaction data, run AI insights
+            user_prompt = f"""
+Analyze all transaction data for this week.
+Tasks:
+- Provide a summary of total sales and revenue for the week.
+- Identify the top 5 best-selling products and their revenue contribution.
+- Highlight any new products that performed strongly midweek.
+- Detect any products that declined in sales compared to the start of the week.
+- Report stock levels and flag any items that are critically low due to sales trends.
+- Offer 3-5 strategic recommendations for inventory management, or product focus for the upcoming week.
+Output Requirements:
+- Use bullet points for summaries.
+- Clearly separate sections (Sales Summary, Product Trends, Stock Alerts, Recommendations).
+- If possible, suggest emerging customer behavior patterns based on purchases.
+Be concise but insightful.
+"""
+            response_text = run_conversation(
+               user_prompt)
+            return Response({"message": response_text}, status=status.HTTP_200_OK)
+        else:
+            # If no data, respond gracefully
+            return Response(
+                {"error": "No transactions found for analysis."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    except Exception as e:
+        logging.error(f"Error in get_weekly_ai_insights: {str(e)}")
+        return Response({"error": "An error occurred: "}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

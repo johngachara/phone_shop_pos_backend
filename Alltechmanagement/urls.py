@@ -34,4 +34,6 @@ urlpatterns = [
     path('api/customers-insights/', customer_insights, name='customer-insights'),
     path('api/products-insights/', product_insights, name='product-insights'),
     path('api/patterns/', sales_patterns, name='sales-patterns'),
+    path('api/daily-ai/', views.get_daily_ai_insights, name='sales-patterns'),
+    path('api/weekly-ai/', views.get_weekly_ai_insights, name='sales-patterns'),
 ]

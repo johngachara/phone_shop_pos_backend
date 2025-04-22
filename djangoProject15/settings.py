@@ -47,7 +47,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'csp',
     'django_extensions',
-    'channels'
 ]
 
 MIDDLEWARE = [
@@ -93,7 +92,7 @@ CSP_FRAME_SRC = ("'none'",)
 CSP_OBJECT_SRC = ("'none'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
 CSP_FORM_ACTION = ("'self'",)
-CSP_CONNECT_SRC = ("'self'",)
+CSP_CONNECT_SRC = ("'self'","https://models.github.ai/inference",f"{os.getenv('SUPABASE_URL')}")
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
     'https://main.gachara.store',

@@ -9,16 +9,16 @@ logger = logging.getLogger('django')
 
 
 class CustomUser:
-    def __init__(self, firebase_uid):
+    def __init__(self, firebase_uid, is_authenticated=False):
         self.firebase_uid = firebase_uid
-        self.is_authenticated = True
+        self.is_authenticated = is_authenticated
 
     def __str__(self):
         return f"CustomUser(firebase_uid={self.firebase_uid})"
 
     @property
     def is_anonymous(self):
-        return False
+        return not self.is_authenticated
 
     @property
     def is_active(self):
@@ -49,7 +49,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                 if django_timezone.now() > exp_datetime:
                     raise InvalidToken('Token has expired')
 
-            return CustomUser(firebase_uid=firebase_uid)
+            return CustomUser(firebase_uid=firebase_uid,is_authenticated=True)
 
         except Exception as e:
             logger.error(f"Error getting user from token: {str(e)}")

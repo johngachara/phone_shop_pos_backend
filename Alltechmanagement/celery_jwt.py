@@ -8,14 +8,11 @@ from rest_framework_simplejwt.tokens import Token
 logger = logging.getLogger('django.security')
 
 
-# custom_auth.py
-
-
 class CeleryUser:
-    def __init__(self, token: Token):
+    def __init__(self, token: Token, is_active=False, is_authenticated=False):
         self.token = token
-        self.is_active = True
-        self.is_authenticated = True
+        self.is_active = is_active
+        self.is_authenticated = is_authenticated
 
     def __str__(self):
         return f"CeleryUser(token={self.token})"
@@ -44,7 +41,7 @@ class CeleryJWTAuthentication(BaseAuthentication):
                 logger.error("CeleryJWTAuthentication: Invalid token for Celery authentication")
                 raise AuthenticationFailed('Invalid token for Celery authentication')
 
-            celery_user = CeleryUser(token=validated_token)
+            celery_user = CeleryUser(token=validated_token,is_authenticated=True,is_active=True)
             logger.debug(f"CeleryJWTAuthentication: Authentication successful for user {celery_user}")
             return celery_user, validated_token
 

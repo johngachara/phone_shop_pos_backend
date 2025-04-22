@@ -11,10 +11,10 @@ load_dotenv()
 
 
 class ClerkUser:
-    def __init__(self, data):
+    def __init__(self, data,is_authenticated=False,is_active=False):
         self.data = data
-        self.is_authenticated = True
-        self.is_active = True
+        self.is_authenticated = is_authenticated
+        self.is_active = is_active
 
     def __str__(self):
         return str(self.data)
@@ -51,7 +51,7 @@ class ClerkAuthentication(BaseAuthentication):
                 user = self.clerk.users.get(user_id=user_id)
                 if not user:
                     raise AuthenticationFailed('User not found')
-                return ClerkUser(user), token
+                return ClerkUser(user,is_authenticated=True,is_active=True), token
             except Exception as clerk_error:
                 logger.error(str(clerk_error))
                 raise AuthenticationFailed(f'Clerk API error')
