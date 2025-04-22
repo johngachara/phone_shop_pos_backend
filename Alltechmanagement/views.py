@@ -602,6 +602,7 @@ def get_customers(request):
     serializer = LcdCustomerSerializer(customers, many=True)
     return Response(serializer.data)
 
+#TODO Add rate limiting to these new apis
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
