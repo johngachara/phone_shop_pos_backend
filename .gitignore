@@ -2,6 +2,7 @@
 django.log
 key_pair.json
 Alltechmanagement/management
+Alltechmanagement/migrations
 scheduler.log
 alltechenv
 .idea

@@ -164,7 +164,7 @@ class CeleryAuthTokenThrottle(SimpleRateThrottle):
     Throttle for the Celery authentication token endpoint.
     Uses IP-based rate limiting regardless of authentication.
     """
-    rate = '20/day' # TODO Change this back to 7 after testing the ai insights apis
+    rate = '7/day'
     scope = 'celery_auth_token'
 
     def get_cache_key(self, request, view):

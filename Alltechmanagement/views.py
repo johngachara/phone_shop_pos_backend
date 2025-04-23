@@ -602,10 +602,11 @@ def get_customers(request):
     serializer = LcdCustomerSerializer(customers, many=True)
     return Response(serializer.data)
 
-#TODO Add rate limiting to these new apis
+
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WeeklyEmailAPIThrottle])
 def get_daily_ai_insights(request):
     try:
 
@@ -619,6 +620,7 @@ def get_daily_ai_insights(request):
             Tasks:
             - Summarize number of sales and total revenue.
             - Identify best-selling and highest revenue products.
+            - Identify customers involved and a summary of total spent in the transactions.
             - Report products that are low in stock after sales.
             - Suggest improvements or immediate actions if necessary.
             Format nicely in sections with bullet points.
@@ -644,6 +646,7 @@ def get_daily_ai_insights(request):
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WeeklyEmailAPIThrottle])
 def get_weekly_ai_insights(request):
     try:
         today = timezone.now().date()
@@ -659,6 +662,7 @@ Analyze all transaction data for this week.
 Tasks:
 - Provide a summary of total sales and revenue for the week.
 - Identify the top 5 best-selling products and their revenue contribution.
+- Identify the top 5 most involved customers and their revenue contribution.
 - Highlight any new products that performed strongly midweek.
 - Detect any products that declined in sales compared to the start of the week.
 - Report stock levels and flag any items that are critically low due to sales trends.
