@@ -95,8 +95,8 @@ CSP_FORM_ACTION = ("'self'",)
 CSP_CONNECT_SRC = ("'self'","https://models.github.ai/inference",f"{os.getenv('SUPABASE_URL')}")
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
-    'https://main.gachara.store',
-    'https://admin.gachara.store',
+    'https://pos.alltechnyeri.co.ke',
+    'https://analytics.alltechnyeri.co.ke',
     'http://localhost:3000',
     'http://localhost:5173',
 
