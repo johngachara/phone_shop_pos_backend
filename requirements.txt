@@ -92,4 +92,4 @@ vine==5.1.0
 wcwidth==0.2.13
 webencodings==0.5.1
 whitenoise==6.8.2
-xhtml2pdf==0.2.16
+xhtml2pdf==0.2.17
