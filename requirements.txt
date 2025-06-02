@@ -21,7 +21,7 @@ click-repl==0.3.0
 cryptography==45.0.3
 cssselect2==0.7.0
 Django==5.1.9
-django-celery-results==2.5.1
+django-celery-results==2.6.0
 django-cors-headers==4.6.0
 django-extensions==3.2.3
 django-permissions-policy==4.23.0
