@@ -48,7 +48,7 @@ h11==0.16.0
 html5lib==1.1
 httplib2==0.22.0
 idna==3.10
-kombu==5.4.2
+kombu==5.5.4
 lxml==5.3.0
 meilisearch==0.31.6
 msgpack==1.1.0
