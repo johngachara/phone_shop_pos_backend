@@ -59,7 +59,7 @@ def async_api_view(methods):
     return decorator
 
 
-@ratelimit(key='ip', rate='5/h')
+#@ratelimit(key='ip', rate='5/h')
 def landing(request):
     return render(request, 'landing.html')
 

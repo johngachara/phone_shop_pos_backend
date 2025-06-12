@@ -1,0 +1,54 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-server
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PASS=${REDIS_PASS}
+    env_file:
+      - .env
+      # Use config file AND set password via command line
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASS}
+  web:
+    build: .
+    command: gunicorn djangoProject15.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - .:/code
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - meilisearch
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./static:/static # Mount the static files volume
+    depends_on:
+      - web
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    ports:
+      - "7700:7700"
+    env_file:
+      - .env
+    restart: always
+    environment:
+      MEILI_ENV: "production"
+      MEILI_DB_PATH: "/meili_data"
+    volumes:
+      - meili_data:/meili_data
+volumes:
+  redis_data:
+  meili_data:
+
