@@ -1,0 +1,41 @@
+.heading-section {
+    margin-bottom: 3rem;
+    text-align: center;
+}
+
+.logo {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    color: #363636;
+}
+
+.message-content {
+    margin: 2.5rem 0;
+}
+
+.signature {
+    font-style: italic;
+    margin-top: 1.5rem;
+}
+
+.table-container {
+    box-shadow: 0 2px 3px rgba(10, 10, 10, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.table td,
+.table th {
+    padding: 1rem;
+}
+
+.table-footer {
+    background-color: #fafafa;
+}
+
+@media screen and (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+    }
+}

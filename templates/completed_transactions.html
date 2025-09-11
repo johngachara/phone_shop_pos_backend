@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ heading }}</title>
+    <style type="text/css">
+        /* Reset and base styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f0f2f5;
+            font-size: x-large;
+        }
+        
+        /* Responsive email container */
+        .email-container {
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        /* Header styles */
+        .email-header {
+            background-color: #4a4a4a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        /* Table styles */
+        .sales-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .sales-table th, .sales-table td {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            text-align: left;
+        }
+        .sales-table th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .sales-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        /* Total section */
+        .total-section {
+            text-align: right;
+            padding: 20px;
+            background-color: #f4f4f4;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        /* Footer */
+        .email-footer {
+            background-color: #4a4a4a;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9em;
+        }
+        
+        /* Responsive adjustments */
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                width: 100%;
+                max-width: 100%;
+            }
+            
+            .sales-table, 
+            .sales-table tbody, 
+            .sales-table tr, 
+            .sales-table td {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .sales-table thead {
+                display: none;
+            }
+            
+            .sales-table tr {
+                margin-bottom: 10px;
+                border: 1px solid #ddd;
+            }
+            
+            .sales-table td {
+                text-align: right;
+                border-bottom: 1px solid #ddd;
+                padding: 10px;
+            }
+            
+            .sales-table td:before {
+                content: attr(data-label);
+                float: left;
+                font-weight: bold;
+            }
+            
+            .email-header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="email-header">
+            <h1>SHOP 2 SALES REPORT</h1>
+        </div>
+        
+        <!-- Subtitle -->
+        <div style="text-align: center; background-color: #f9f9f9; padding: 15px;">
+            <p>Transaction Summary for This Week</p>
+        </div>
+        
+        <!-- Transactions Table -->
+        <table class="sales-table">
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Customer Name</th>
+                    <th>Selling Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transaction in transactions %}
+                <tr>
+                    <td data-label="Product Name">{{ transaction.product_name }}</td>
+                    <td data-label="Customer Name">{{ transaction.customer_name }}</td>
+                    <td data-label="Selling Price" class="price">{{ transaction.selling_price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Total Section -->
+        <div class="total-section">
+            Total: {{ total }}
+        </div>
+        
+        <!-- Footer -->
+        <div class="email-footer">
+            © 2024 AllTech Team
+        </div>
+    </div>
+</body>
+</html>
