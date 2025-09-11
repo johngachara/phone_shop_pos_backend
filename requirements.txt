@@ -93,7 +93,7 @@ pyHanko==0.25.3
 pyhanko-certvalidator==0.26.5
 PyJWT==2.5.0
 pyOpenSSL==25.1.0
-pyparsing==3.2.0
+pyparsing==3.2.3
 pypdf==6.0.0
 pytest==8.3.5
 pytest-mock==3.14.0
