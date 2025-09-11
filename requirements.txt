@@ -105,7 +105,7 @@ qrcode==8.0
 realtime==2.4.2
 redis==5.2.0
 reportlab==4.2.5
-requests==2.32.3
+requests==2.32.4
 rsa==4.9
 setuptools==78.1.1
 six==1.16.0
