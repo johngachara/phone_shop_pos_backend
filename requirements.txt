@@ -102,7 +102,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 PyYAML==6.0.2
 qrcode==8.0
-realtime==2.4.2
+realtime==2.7.0
 redis==5.2.0
 reportlab==4.2.5
 requests==2.32.5
