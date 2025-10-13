@@ -11,7 +11,7 @@ attrs==25.4.0
 billiard==4.2.2
 build==1.3.0
 CacheControl==0.14.3
-cachetools==6.2.0
+cachetools==6.2.1
 camel-converter==5.0.0
 cbor2==5.7.0
 celery==5.5.3
