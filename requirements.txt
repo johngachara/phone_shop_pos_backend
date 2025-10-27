@@ -83,7 +83,7 @@ packaging==25.0
 pillow==11.3.0
 pip-upgrader==1.4.15
 pluggy==1.6.0
-postgrest==2.21.1
+postgrest==2.22.2
 prompt_toolkit==3.0.52
 propcache==0.4.0
 proto-plus==1.26.1
