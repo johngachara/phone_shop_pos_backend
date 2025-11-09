@@ -33,8 +33,6 @@ from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
     saved_serializer2, LcdCustomerSerializer
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
     OrderManagementThrottle, WeeklyEmailAPIThrottle
-from djangoProject15 import settings
-from django.core.mail import  EmailMessage
 import meilisearch
 import logging
 from xhtml2pdf import pisa
