@@ -126,7 +126,7 @@ supabase==2.21.1
 supabase-auth==2.21.1
 supabase-functions==2.21.1
 supafunc==0.10.2
-svglib==1.5.1
+svglib==1.6.0
 terminaltables==3.1.10
 tinycss2==1.4.0
 tqdm==4.67.1
