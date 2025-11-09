@@ -1,7 +1,10 @@
+import base64
 import os
 from datetime import datetime, timedelta
 from functools import wraps
 from io import BytesIO
+
+import resend
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
@@ -469,6 +472,9 @@ async def refund2_api(request, id):
 @throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales2_api(request):
     try:
+        # Set Resend API key
+        resend.api_key = os.getenv("RESEND_API_KEY")
+
         # Fetch completed transactions
         transactions = COMPLETED_TRANSACTIONS2_FIX.objects.all()
         total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
@@ -490,21 +496,27 @@ def send_sales2_api(request):
         if pisa_status.err:
             return Response('Failed to generate PDF.', status=500)
 
-        # Prepare email
-        sender_email = settings.EMAIL_HOST_USER
+        # Encode PDF to base64 for Resend attachment
+        pdf_base64 = base64.b64encode(pdf_file.getvalue()).decode('utf-8')
+
+        # Prepare and send email with Resend
+        sender_email = os.getenv('RESEND_SENDER_EMAIL')
         recipient_email = os.getenv('GMAIL_RECEIVER')
-        email = EmailMessage(
-            subject="Shop 2 Sales Report",
-            body="Attached is the completed transactions PDF report.",
-            from_email=sender_email,
-            to=[recipient_email],
-        )
 
-        # Attach PDF
-        email.attach('Shop2_Completed_Transactions.pdf', pdf_file.getvalue(), 'application/pdf')
+        params: resend.Emails.SendParams = {
+            "from": sender_email,
+            "to": [recipient_email],
+            "subject": "Shop 2 Sales Report",
+            "html": "<p>Attached is the completed transactions PDF report.</p>",
+            "attachments": [
+                {
+                    "filename": "Shop2_Completed_Transactions.pdf",
+                    "content": pdf_base64,
+                }
+            ],
+        }
 
-        # Send email
-        email.send()
+        email = resend.Emails.send(params)
 
         # Delete the transactions after sending the email
         transactions.delete()

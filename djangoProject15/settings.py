@@ -82,17 +82,18 @@ PERMISSIONS_POLICY = {
 }
 WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
 CORS_ALLOW_CREDENTIALS = True
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'","'unsafe-inline'")
-CSP_IMG_SRC = (
-    "'self'", )
-CSP_FONT_SRC = ("'self'",)
-CSP_FRAME_SRC = ("'none'",)
-CSP_OBJECT_SRC = ("'none'",)
-CSP_FRAME_ANCESTORS = ("'none'",)
-CSP_FORM_ACTION = ("'self'",)
-CSP_CONNECT_SRC = ("'self'","https://models.github.ai/inference",f"{os.getenv('SUPABASE_URL')}")
+CONTENT_SECURITY_POLICY = {'DIRECTIVES': {'connect-src': ("'self'",
+                                'https://models.github.ai/inference',
+                                os.getenv('SUPABASE_URL')),
+                'default-src': ("'self'",),
+                'font-src': ("'self'",),
+                'form-action': ("'self'",),
+                'frame-ancestors': ("'none'",),
+                'frame-src': ("'none'",),
+                'img-src': ("'self'",),
+                'object-src': ("'none'",),
+                'script-src': ("'self'",),
+                'style-src': ("'self'", "'unsafe-inline'")}}
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
     'https://pos.alltechnyeri.co.ke',
