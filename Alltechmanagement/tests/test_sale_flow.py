@@ -231,3 +231,45 @@ def test_a_direct_sale_cannot_oversell(client, stock):
     stock.refresh_from_db()
     assert stock.quantity == 10
     assert Sale.objects.count() == 0
+
+
+# --- cache invalidation ---------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+def test_a_refund_is_visible_in_the_single_item_lookup(client, stock):
+    """The bug this covers: the refund restored stock and the API denied it.
+
+    Refunding cleared the stock *list* cache but not SHOP_STOCK_<id>, which is
+    what the sell sheet reads to decide whether there is enough to sell. The
+    database was right the whole time and the API reported the pre-refund
+    figure, so the counter would refuse a sale it could make.
+    """
+    from django.core.cache import cache
+    cache.clear()
+
+    sold = client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name, "price": "5000.00",
+        "quantity": 3, "customer_name": "Jane",
+    }, format="json")
+    sale_id = sold.json()["transaction_id"]
+
+    # Read it, which populates the per-item cache with the reduced figure.
+    assert client.get(f"/api/get_shop2_stock_api/{stock.pk}").json()["data"]["quantity"] == 7
+
+    assert client.post(f"/api/refund2/{sale_id}").status_code == 200
+
+    # Must reflect the refund, not the cached pre-refund value.
+    assert client.get(f"/api/get_shop2_stock_api/{stock.pk}").json()["data"]["quantity"] == 10
+
+
+@pytest.mark.django_db(transaction=True)
+def test_selling_is_visible_in_the_single_item_lookup(client, stock):
+    from django.core.cache import cache
+    cache.clear()
+
+    assert client.get(f"/api/get_shop2_stock_api/{stock.pk}").json()["data"]["quantity"] == 10
+    client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name, "price": "5000.00",
+        "quantity": 2, "customer_name": "Jane",
+    }, format="json")
+    assert client.get(f"/api/get_shop2_stock_api/{stock.pk}").json()["data"]["quantity"] == 8

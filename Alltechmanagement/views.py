@@ -90,6 +90,25 @@ def log_db_queries(f):
     return new_f
 
 
+
+async def invalidate_stock_cache(item_id=None):
+    """Clear the cached stock list, and one item if named.
+
+    Both matter. The list backs the stock screen; SHOP_STOCK_<id> backs the
+    single-item lookup that the sell sheet reads to decide whether there is
+    enough to sell. Clearing only the list leaves the item stale, so a refund
+    returned units to the database while the API went on reporting the
+    pre-refund figure -- and the counter would refuse a sale it could make.
+    """
+    keys = ['SHOP_STOCK']
+    if item_id is not None:
+        keys.append(f'SHOP_STOCK_{item_id}')
+    for key in keys:
+        try:
+            await cache.adelete(key)
+        except Exception as exc:
+            logging.error("Could not clear cache key %s: %s", key, exc)
+
 def record_customer_spend(customer_name, amount):
     """Add an amount to a customer's running total.
 
@@ -239,8 +258,7 @@ async def sell_api(request, product_id):
 
         # Handle non-critical async operations
         async def async_operations():
-            await cache.adelete(f'SHOP_STOCK_{product_id}')
-            await cache.adelete('SHOP_STOCK')
+            await invalidate_stock_cache(product_id)
 
         # Create background task for async operations
 
@@ -323,10 +341,7 @@ async def add_stock2_api(request):
 
             # Handle non-critical operations
             async def async_operations():
-                try:
-                    await cache.adelete('SHOP_STOCK')
-                except Exception as e:
-                    print(f"Error in async operations: {e}")
+                await invalidate_stock_cache(serializer_data.get('id'))
 
             # Create background task
             await asyncio.create_task(async_operations())
@@ -369,8 +384,7 @@ async def delete_stock2_api(request, id):
         # Handle non-critical operations
         async def async_operations():
             try:
-                await cache.adelete(f'SHOP_STOCK_{id}')
-                await cache.adelete('SHOP_STOCK')
+                await invalidate_stock_cache(id)
             except Exception as e:
                 print(f"Error in async operations: {e}")
 
@@ -410,8 +424,7 @@ async def update_stock2_api(request, id):
         # Handle non-critical operations
         async def async_operations():
             try:
-                await cache.adelete(f'SHOP_STOCK_{id}')
-                await cache.adelete('SHOP_STOCK')
+                await invalidate_stock_cache(id)
             except Exception as e:
                 print(f"Error in async operations: {e}")
 
@@ -471,10 +484,9 @@ async def refund2_api(request, id):
 
         # Handle non-critical operations
         async def async_operations():
-            try:
-                await cache.adelete('SHOP_STOCK')
-            except Exception as e:
-                logging.error(f"Error in async operations: {e}")
+            # item.id, not just the list: this is the refund path, and leaving
+            # the per-item entry stale is what made refunded units invisible.
+            await invalidate_stock_cache(item.id)
 
         # Create background task
         await asyncio.create_task(async_operations())
