@@ -1,7 +1,7 @@
 import logging
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle, SimpleRateThrottle
 
-from djangoProject15 import settings
+from django.conf import settings
 
 logger = logging.getLogger('django.security')
 
