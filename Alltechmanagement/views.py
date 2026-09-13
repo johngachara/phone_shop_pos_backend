@@ -676,7 +676,7 @@ def get_daily_ai_insights(request):
             """
 
             # If there is transaction data, run AI insights
-            response_text = run_conversation(user_prompt)
+            response_text = run_conversation(user_prompt, days=1)
             return Response({"message": response_text}, status=status.HTTP_200_OK)
         else:
             # If no data, respond gracefully

@@ -13,6 +13,7 @@ from .accessories import (
     sell_accessory,
     update_accessory,
 )
+from .ai.views import ai_chat, ai_confirm
 from .health import health
 from .webauthn_views import (
     authentication_options,
@@ -46,6 +47,8 @@ urlpatterns = [
     path('api/accessories/<int:accessory_id>/update/', update_accessory, name='accessory-update'),
     path('api/accessories/<int:accessory_id>/delete/', delete_accessory, name='accessory-delete'),
     path('api/accessories/<int:accessory_id>/sell/', sell_accessory, name='accessory-sell'),
+    path('api/ai/chat/', ai_chat, name='ai-chat'),
+    path('api/ai/confirm/', ai_confirm, name='ai-confirm'),
     path('api/passkeys/', list_credentials, name='passkey-list'),
     path('api/passkeys/register/options/', registration_options, name='passkey-register-options'),
     path('api/passkeys/register/verify/', verify_registration, name='passkey-register-verify'),

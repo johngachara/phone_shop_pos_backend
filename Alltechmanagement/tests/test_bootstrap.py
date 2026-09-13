@@ -35,6 +35,9 @@ def test_debug_is_off_by_default(monkeypatch):
 @pytest.mark.parametrize("module", [
     "Alltechmanagement.FCMManager",
     "Alltechmanagement.GPTAgent",
+    "Alltechmanagement.ai.provider",
+    "Alltechmanagement.ai.tools",
+    "Alltechmanagement.ai.views",
     "Alltechmanagement.health",
     "Alltechmanagement.views",
     "Alltechmanagement.admin_apis",
@@ -42,7 +45,7 @@ def test_debug_is_off_by_default(monkeypatch):
 ])
 def test_module_imports_without_external_credentials(module):
     # Firebase and the AI clients used to be constructed at import time, so a
-    # missing key_pair.json or GITHUB_TOKEN took down the entire process.
+    # missing key_pair.json or model API key took down the entire process.
     importlib.import_module(module)
 
 
@@ -83,12 +86,12 @@ def test_fcm_env_credentials_need_the_required_fields(monkeypatch):
     assert FCMManager._credentials_from_env() is None
 
 
-def test_gpt_agent_raises_configuration_error_without_keys(monkeypatch):
-    from Alltechmanagement import GPTAgent
-    monkeypatch.setattr(GPTAgent, "_openai_client", None)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    with pytest.raises(GPTAgent.AIConfigurationError):
-        GPTAgent.get_openai_client()
+def test_ai_provider_raises_when_no_key_is_configured(monkeypatch):
+    from Alltechmanagement.ai import provider
+    monkeypatch.setattr(provider, "_client", None)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    with pytest.raises(provider.AIUnavailable):
+        provider.get_client()
 
 
 @pytest.mark.django_db
