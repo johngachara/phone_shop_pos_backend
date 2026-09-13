@@ -11,9 +11,7 @@ hostnames, credentials or error detail, which would otherwise hand an unauthed
 caller a map of the infrastructure.
 """
 import logging
-import os
 
-import meilisearch
 from django.core.cache import cache
 from django.db import connection
 from rest_framework import status
@@ -36,16 +34,9 @@ def _check_cache():
         raise RuntimeError("cache round-trip failed")
 
 
-def _check_meilisearch():
-    client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH_KEY'))
-    if not client.is_healthy():
-        raise RuntimeError("meilisearch reported unhealthy")
-
-
 CHECKS = {
     "database": _check_database,
     "cache": _check_cache,
-    "search": _check_meilisearch,
 }
 
 

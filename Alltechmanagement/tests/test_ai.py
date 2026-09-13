@@ -59,7 +59,12 @@ def test_a_write_tool_does_not_change_anything_during_chat(client):
     assert Stock.objects.count() == 0
 
 
-@pytest.mark.django_db
+# These execute a write through /api/ai/confirm/, which calls add_stock2_api --
+# an async view. sync_to_async reaches the ORM on a separate connection, outside
+# pytest-django's wrapping transaction, so those rows commit and are never
+# rolled back. Without transaction=True they survive the test and appear in
+# every later one, which is how a search test started seeing "S21 Screen".
+@pytest.mark.django_db(transaction=True)
 def test_confirming_executes_the_change(client):
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
         assistant(tool_calls=[tool_call("add_stock", '{"product_name":"S21 Screen","quantity":4,"selling_price":4500}')]),
@@ -75,7 +80,12 @@ def test_confirming_executes_the_change(client):
     assert Stock.objects.get(product_name="S21 Screen").quantity == 4
 
 
-@pytest.mark.django_db
+# These execute a write through /api/ai/confirm/, which calls add_stock2_api --
+# an async view. sync_to_async reaches the ORM on a separate connection, outside
+# pytest-django's wrapping transaction, so those rows commit and are never
+# rolled back. Without transaction=True they survive the test and appear in
+# every later one, which is how a search test started seeing "S21 Screen".
+@pytest.mark.django_db(transaction=True)
 def test_an_action_cannot_be_confirmed_twice(client):
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
         assistant(tool_calls=[tool_call("add_stock", '{"product_name":"Once","quantity":1,"selling_price":100}')]),

@@ -198,6 +198,10 @@ RATELIMIT_IP_META_KEY = lambda request: request.META.get('HTTP_X_FORWARDED_FOR',
 # Including public would let Django resolve an existing public.django_migrations
 # and conclude that migrations it has never applied here were already done.
 DB_SCHEMA = os.getenv('DB_SCHEMA')
+# Where Postgres extensions live. Appended to the search path so pg_trgm's
+# functions resolve; never first, so tables still land in DB_SCHEMA. Supabase
+# installs extensions into `public`.
+DB_EXTENSIONS_SCHEMA = os.getenv('DB_EXTENSIONS_SCHEMA', 'public')
 
 DATABASES = {
     'default': {
@@ -212,7 +216,10 @@ DATABASES = {
 
 if DB_SCHEMA:
     DATABASES['default'].setdefault('OPTIONS', {})
-    DATABASES['default']['OPTIONS']['options'] = f'-c search_path={DB_SCHEMA}'
+    _path = DB_SCHEMA
+    if DB_EXTENSIONS_SCHEMA and DB_EXTENSIONS_SCHEMA != DB_SCHEMA:
+        _path += f',{DB_EXTENSIONS_SCHEMA}'
+    DATABASES['default']['OPTIONS']['options'] = f'-c search_path={_path}'
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

@@ -131,3 +131,32 @@ def test_manager_can_also_use_accessories(accessory):
     api = APIClient()
     api.force_authenticate(user=principal(ROLE_MANAGER))
     assert api.get("/api/accessories/").status_code == 200
+
+
+@pytest.mark.django_db
+def test_the_first_page_is_cached_and_writes_clear_it(client, accessory):
+    from django.core.cache import cache
+    cache.clear()
+
+    assert client.get('/api/accessories/').json()['totalItems'] == 1
+
+    # A write must make the cached page stale immediately. Before this, the
+    # four write paths deleted a key nothing had ever set.
+    client.post('/api/accessories/add/', {
+        'product_name': 'Car Charger', 'quantity': 3, 'price': '800.00',
+    }, format='json')
+
+    assert client.get('/api/accessories/').json()['totalItems'] == 2
+
+
+@pytest.mark.django_db
+def test_a_search_is_not_served_from_the_unfiltered_cache(client, accessory):
+    from django.core.cache import cache
+    cache.clear()
+
+    # Warm the cache with the unfiltered page first.
+    assert client.get('/api/accessories/').json()['totalItems'] == 1
+
+    # A search must not be answered with the cached full list.
+    body = client.get('/api/accessories/?q=zzzznothing').json()
+    assert body['items'] == []
