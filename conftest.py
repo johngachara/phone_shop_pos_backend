@@ -18,3 +18,20 @@ os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("DB_PORT", "55432")  # compose publishes Postgres here
 os.environ.setdefault("MEILISEARCH_URL", "http://localhost:57700")
 os.environ.setdefault("MEILISEARCH_KEY", "devmasterkey")
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_state():
+    """Reset rate-limit counters between tests.
+
+    Throttle state lives in Redis, so without this it survives not just from
+    test to test but from one whole run to the next -- a suite that passed once
+    would then fail on a re-run with 429s that have nothing to do with the code.
+    """
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()

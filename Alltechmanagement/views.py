@@ -15,7 +15,7 @@ import asyncio
 import time
 from django.template.loader import render_to_string
 from django.db import transaction as django_transaction
-from django.db.models import Sum, F
+from django.db.models import DecimalField, Sum, F
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
@@ -24,12 +24,14 @@ from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
-from Alltechmanagement.models import SHOP2_STOCK_FIX, \
-    SAVED_TRANSACTIONS2_FIX, \
-    COMPLETED_TRANSACTIONS2_FIX, RECEIPTS2_FIX, LcdCustomers
+from Alltechmanagement.models import Customer, Sale, Stock
 from django.shortcuts import render
-from Alltechmanagement.serializers import SellSerializer, shop2_serializer, \
-    saved_serializer2, LcdCustomerSerializer
+from Alltechmanagement.serializers import (
+    CustomerSerializer,
+    SaleSerializer,
+    SellSerializer,
+    StockSerializer,
+)
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
     OrderManagementThrottle, WeeklyEmailAPIThrottle
 import meilisearch
@@ -91,12 +93,12 @@ def get_shop2_stock(request):
     cache_key = 'SHOP_STOCK'
     cached_data = cache.get(cache_key)
     if cached_data is None:
-        cached_data = SHOP2_STOCK_FIX.objects.all()
+        cached_data = Stock.objects.all()
         cache.set(cache_key, cached_data, timeout=60 * 120)
     pagination_class = CustomPagination
     paginator = pagination_class()
     paginated_queryset = paginator.paginate_queryset(cached_data, request)
-    serializer = shop2_serializer(paginated_queryset, many=True)
+    serializer = StockSerializer(paginated_queryset, many=True)
     return paginator.get_paginated_response(serializer.data)
 
 
@@ -107,8 +109,8 @@ def get_shop2_stock_api(request, id):
     cache_key = f'SHOP_STOCK_{id}'
     cached_data = cache.get(cache_key)
     if cached_data is None:
-        data = SHOP2_STOCK_FIX.objects.get(pk=id)
-        serializer = shop2_serializer(instance=data)
+        data = Stock.objects.get(pk=id)
+        serializer = StockSerializer(instance=data)
         cached_data = serializer.data
         cache.set(cache_key, cached_data, timeout=60 * 120)
     return Response({'data': cached_data})
@@ -128,11 +130,15 @@ async def sell_api(request, product_id):
         def perform_db_operations():
             with django_transaction.atomic():
                 # Get product with select_for_update to prevent race conditions
-                product = (SHOP2_STOCK_FIX.objects
+                product = (Stock.objects
                            .select_for_update()
                            .get(pk=product_id))
 
                 quantity = serializer.validated_data['quantity']
+
+                # Read before the F() update below, so the value recorded on the
+                # sale is the cost of the item as it stands right now.
+                buying_price_at_sale = product.buying_price
 
                 # Validate quantity
                 if product.quantity < quantity:
@@ -143,11 +149,16 @@ async def sell_api(request, product_id):
                 product.save()
 
                 # Create saved transaction
-                saved_transaction = SAVED_TRANSACTIONS2_FIX.objects.create(
+                saved_transaction = Sale.objects.create(
                     product_name=serializer.validated_data['product_name'],
                     selling_price=serializer.validated_data['price'],
+                    # Joining Stock at report time instead would silently
+                    # rewrite historical profit on every restock.
+                    buying_price=buying_price_at_sale,
                     quantity=quantity,
-                    customer_name=serializer.validated_data['customer_name']
+                    customer_name=serializer.validated_data['customer_name'],
+                    stock=product,
+                    status=Sale.Status.PENDING,
                 )
 
                 # Refresh product to get actual quantity
@@ -197,7 +208,7 @@ async def sell_api(request, product_id):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-    except SHOP2_STOCK_FIX.DoesNotExist:
+    except Stock.DoesNotExist:
         return Response(
             {'error': 'Product not found'},
             status=status.HTTP_404_NOT_FOUND
@@ -214,8 +225,8 @@ async def sell_api(request, product_id):
 @throttle_classes([InventoryCheckThrottle])
 @permission_classes([IsAuthenticated])
 def get_saved2(request):
-    data = SAVED_TRANSACTIONS2_FIX.objects.order_by('-created_at')
-    serializer = saved_serializer2(instance=data, many=True)
+    data = Sale.objects.filter(status=Sale.Status.PENDING).order_by('-created_at')
+    serializer = SaleSerializer(instance=data, many=True)
     return Response({'data': serializer.data})
 
 
@@ -224,43 +235,37 @@ def get_saved2(request):
 @throttle_classes([SalesOperationsThrottle])
 def complete_transaction2_api(request, transaction_id):
     with django_transaction.atomic():
-        # Fetch the transaction details
-        transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=transaction_id)
-        transaction_name = transaction.product_name
-        transaction_quantity = transaction.quantity
-        transaction_price = transaction.selling_price
-        transaction_customer = transaction.customer_name.lower()
-
         try:
-            # Try to get the customer
-            customer = LcdCustomers.objects.get(customer_name=transaction_customer)
-            # Update the customer's total spent
-            customer.total_spent += transaction_price * transaction_quantity
-            customer.save()
-        except ObjectDoesNotExist:
-            # Customer not found, create a new customer entry
-            LcdCustomers.objects.create(
-                customer_name=transaction_customer,
-                total_spent=transaction_price * transaction_quantity
+            sale = (Sale.objects
+                    .select_for_update()
+                    .get(pk=transaction_id, status=Sale.Status.PENDING))
+        except Sale.DoesNotExist:
+            return Response({'error': 'Pending transaction not found'}, status=404)
+
+        customer_name = sale.customer_name.lower()
+        amount = sale.total_amount
+
+        customer, created = Customer.objects.get_or_create(
+            name=customer_name,
+            defaults={'total_spent': amount},
+        )
+        if not created:
+            # F() rather than read-modify-write: two tills completing sales for
+            # the same customer at once would otherwise lose one of the amounts.
+            Customer.objects.filter(pk=customer.pk).update(
+                total_spent=F('total_spent') + amount
             )
 
-        # Create the completed transaction and receipt
-        COMPLETED_TRANSACTIONS2_FIX.objects.create(
-            product_name=transaction_name,
-            selling_price=transaction_price,
-            quantity=transaction_quantity,
-            customer_name=transaction_customer
-        )
-        RECEIPTS2_FIX.objects.create(
-            product_name=transaction_name,
-            selling_price=transaction_price,
-            quantity=transaction_quantity,
-            customer_name=transaction_customer
-        )
-        # Clear dashboard caches
+        # One row, one status change. Previously this wrote copies into
+        # COMPLETED_TRANSACTIONS2_FIX and RECEIPTS2_FIX and deleted the
+        # original, which made the permanent record a side effect of a
+        # duplicate write.
+        sale.status = Sale.Status.COMPLETED
+        sale.completed_at = timezone.now()
+        sale.customer_name = customer_name
+        sale.save(update_fields=['status', 'completed_at', 'customer_name', 'updated_at'])
+
         invalidate_dashboard_caches()
-        # Delete the saved transaction
-        transaction.delete()
 
         return Response('Completed transaction', status=200)
 @async_api_view(['POST'])
@@ -268,7 +273,7 @@ def complete_transaction2_api(request, transaction_id):
 async def add_stock2_api(request):
     if request.method == 'POST':
         data = request.data
-        serializer = shop2_serializer(data=data)
+        serializer = StockSerializer(data=data)
 
         @sync_to_async
         def validate_and_save():
@@ -325,11 +330,11 @@ async def delete_stock2_api(request, id):
         @sync_to_async
         def delete_from_db():
             with django_transaction.atomic():
-                data = SHOP2_STOCK_FIX.objects.get(pk=id)
+                data = Stock.objects.get(pk=id)
                 data_copy = {
                     'id': data.id,
                     'product_name': data.product_name,
-                    'price': data.price,
+                    'price': int(data.selling_price),
                     'quantity': data.quantity
                 }
                 data.delete()
@@ -362,14 +367,14 @@ async def update_stock2_api(request, id):
     @sync_to_async
     def validate_and_update():
         try:
-            data = SHOP2_STOCK_FIX.objects.get(pk=id)
-            serializer = shop2_serializer(instance=data, data=request.data, partial=True)
+            data = Stock.objects.get(pk=id)
+            serializer = StockSerializer(instance=data, data=request.data, partial=True)
             if serializer.is_valid(raise_exception=True):
                 with django_transaction.atomic():
                     instance = serializer.save()
                     return instance, serializer.data
             return None, None
-        except SHOP2_STOCK_FIX.DoesNotExist:
+        except Stock.DoesNotExist:
             return None, None
 
     try:
@@ -408,26 +413,37 @@ async def update_stock2_api(request, id):
         )
 
 
-@async_api_view(['GET'])
+# GET is kept alongside POST only because the current POS calls this with GET.
+# A state-changing GET is wrong -- it is replayable and cacheable -- and the GET
+# form goes away once the rebuilt frontend uses POST.
+@async_api_view(['GET', 'POST'])
 @throttle_classes([OrderManagementThrottle])
 async def refund2_api(request, id):
     @sync_to_async
     def process_refund():
         try:
             with django_transaction.atomic():
-                transaction = SAVED_TRANSACTIONS2_FIX.objects.get(pk=id)
-                item = SHOP2_STOCK_FIX.objects.filter(
-                    product_name__iexact=transaction.product_name
-                ).first()
+                sale = Sale.objects.select_for_update().get(
+                    pk=id, status=Sale.Status.PENDING
+                )
+                item = (Stock.objects
+                        .select_for_update()
+                        .filter(product_name__iexact=sale.product_name)
+                        .first())
 
                 if not item:
                     return None, 'Item not found in stock'
 
-                item.quantity += 1
-                item.save()
-                transaction.delete()
+                # Return every unit the order held. This restored exactly one
+                # unit before, so refunding a 3-unit order silently lost 2 from
+                # stock. F() keeps it correct against a concurrent sale.
+                Stock.objects.filter(pk=item.pk).update(
+                    quantity=F('quantity') + sale.quantity
+                )
+                sale.delete()
+                item.refresh_from_db()
                 return item, None
-        except SAVED_TRANSACTIONS2_FIX.DoesNotExist:
+        except Sale.DoesNotExist:
             return None, 'Transaction not found'
         except Exception as e:
             logging.error(f"Error in process_refund: {str(e)}")
@@ -444,7 +460,7 @@ async def refund2_api(request, id):
                 body = {
                     'id': item.id,
                     'product_name': item.product_name,
-                    'price': int(item.price),
+                    'price': int(item.selling_price),
                     'quantity': item.quantity,
                 }
                 index.update_documents([body])
@@ -471,12 +487,23 @@ def send_sales2_api(request):
         # Set Resend API key
         resend.api_key = os.getenv("RESEND_API_KEY")
 
-        # Fetch completed transactions
-        transactions = COMPLETED_TRANSACTIONS2_FIX.objects.all()
-        total = COMPLETED_TRANSACTIONS2_FIX.objects.aggregate(amount=Sum('selling_price'))['amount']
+        # Completed sales that have not yet appeared in a report. This used
+        # to be a whole table that got emptied after each send.
+        transactions = Sale.objects.filter(
+            status=Sale.Status.COMPLETED, reported_at__isnull=True
+        )
+        # Sum(selling_price) counted a 3-unit sale once, so any multi-unit sale
+        # was undercounted in every report sent so far.
+        total = transactions.aggregate(
+            amount=Sum(F('selling_price') * F('quantity'), output_field=DecimalField())
+        )['amount']
 
         if not transactions.exists():
             return Response('No completed transactions available.', status=404)
+
+        # Materialise before marking as reported, so the template renders the
+        # rows this report actually covers.
+        transactions = list(transactions)
 
         # Render the HTML template
         html_content = render_to_string('completed_transactions.html', {
@@ -514,8 +541,12 @@ def send_sales2_api(request):
 
         email = resend.Emails.send(params)
 
-        # Delete the transactions after sending the email
-        transactions.delete()
+        # Mark as reported rather than deleting. Deleting destroyed the only
+        # copy of these rows apart from the duplicate that used to be written
+        # into RECEIPTS2_FIX.
+        Sale.objects.filter(pk__in=[t.pk for t in transactions]).update(
+            reported_at=timezone.now()
+        )
 
         return Response("Email with PDF sent successfully!")
     except Exception as e:
@@ -528,7 +559,7 @@ def send_sales2_api(request):
 def send_push_notification(request):
     try:
         # Fetch items with quantity less than or equal to 1
-        data = SHOP2_STOCK_FIX.objects.filter(quantity__lte=1)
+        data = Stock.objects.filter(quantity__lte=1)
 
         if data.exists():
             product_details = []
@@ -583,12 +614,12 @@ def detailed_low_stock(request):
     threshold = int(request.GET.get('threshold', 3))  # Default threshold is 3
 
     # Query items with quantity less than or equal to the threshold
-    queryset = SHOP2_STOCK_FIX.objects.filter(quantity__lte=threshold).order_by('quantity')
+    queryset = Stock.objects.filter(quantity__lte=threshold).order_by('quantity')
 
     paginator = StandardResultsSetPagination()
     paginated_queryset = paginator.paginate_queryset(queryset, request)
 
-    serializer = shop2_serializer(paginated_queryset, many=True)
+    serializer = StockSerializer(paginated_queryset, many=True)
 
     return paginator.get_paginated_response(serializer.data)
 
@@ -606,8 +637,8 @@ def custom_500(request):
 @permission_classes([IsAuthenticated])
 @throttle_classes([InventoryCheckThrottle])
 def get_customers(request):
-    customers = LcdCustomers.objects.all()
-    serializer = LcdCustomerSerializer(customers, many=True)
+    customers = Customer.objects.all()
+    serializer = CustomerSerializer(customers, many=True)
     return Response(serializer.data)
 
 
@@ -619,7 +650,9 @@ def get_daily_ai_insights(request):
     try:
 
         yesterday = datetime.now() - timedelta(days=1)
-        data = RECEIPTS2_FIX.objects.filter(created_at__date=yesterday)
+        data = Sale.objects.filter(
+            status=Sale.Status.COMPLETED, created_at__date=yesterday
+        )
 
         if data.exists():
             user_prompt = f"""
@@ -661,7 +694,9 @@ def get_weekly_ai_insights(request):
         current_week = today - timedelta(days=today.weekday())  # Monday of this week
 
         # Fetch transactions for the current week
-        data = RECEIPTS2_FIX.objects.filter(created_at__date__gte=current_week)
+        data = Sale.objects.filter(
+            status=Sale.Status.COMPLETED, created_at__date__gte=current_week
+        )
 
         if data.exists():
             # If there is transaction data, run AI insights

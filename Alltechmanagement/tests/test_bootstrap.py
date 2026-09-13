@@ -5,6 +5,7 @@ behaviour. Every one of them corresponds to something that actually broke the
 local stack while it was being stood up, so they exist to stop it regressing.
 """
 import importlib
+from decimal import Decimal
 
 import pytest
 from django.urls import reverse
@@ -50,7 +51,36 @@ def test_fcm_get_ref_returns_none_without_credentials(monkeypatch):
     monkeypatch.setattr(FCMManager, "_initialized", False)
     monkeypatch.setattr(FCMManager.settings, "KEY", "/nonexistent/key_pair.json")
     monkeypatch.setattr(FCMManager.firebase_admin, "_apps", {})
+    # Both credential sources have to be absent: env vars are tried first now,
+    # and a real .env supplies them.
+    for name in FCMManager._ENV_TO_FIELD:
+        monkeypatch.delenv(name, raising=False)
     assert FCMManager.get_ref() is None
+
+
+def test_fcm_builds_credentials_from_env(monkeypatch):
+    from Alltechmanagement import FCMManager
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "demo-project")
+    monkeypatch.setenv("FIREBASE_CLIENT_EMAIL", "svc@demo.iam.gserviceaccount.com")
+    monkeypatch.setenv(
+        "FIREBASE_PRIVATE_KEY",
+        "-----BEGIN PRIVATE KEY-----\\nAAAA\\nBBBB\\n-----END PRIVATE KEY-----\\n",
+    )
+    info = FCMManager._credentials_from_env()
+    assert info["type"] == "service_account"
+    assert info["project_id"] == "demo-project"
+    # Environment variables cannot carry real newlines; if the literal \n
+    # escapes survive, the PEM parses as garbage and every push fails opaquely.
+    assert "\\n" not in info["private_key"]
+    assert info["private_key"].count("\n") == 4
+
+
+def test_fcm_env_credentials_need_the_required_fields(monkeypatch):
+    from Alltechmanagement import FCMManager
+    for name in FCMManager._ENV_TO_FIELD:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "demo-project")
+    assert FCMManager._credentials_from_env() is None
 
 
 def test_gpt_agent_raises_configuration_error_without_keys(monkeypatch):
@@ -69,3 +99,67 @@ def test_health_endpoint_reports_database_ok(client):
     assert body["checks"]["database"] == "ok"
     # The probe is unauthenticated, so it must not leak infrastructure detail.
     assert set(body["checks"].values()) <= {"ok", "unavailable"}
+
+
+@pytest.mark.django_db
+def test_sale_profit_is_none_when_buying_price_unknown():
+    from Alltechmanagement.models import Sale
+    sale = Sale.objects.create(
+        product_name="Screen A", quantity=3, selling_price="100.00",
+        customer_name="jane",
+    )
+    assert sale.total_amount == 300
+    # None, not zero: an unrecorded cost is not a free item, and reporting it
+    # as zero would overstate profit.
+    assert sale.profit is None
+
+
+@pytest.mark.django_db
+def test_sale_profit_uses_price_captured_at_sale_time():
+    from Alltechmanagement.models import Sale, Stock
+    stock = Stock.objects.create(
+        product_name="Screen B", quantity=10,
+        selling_price="100.00", buying_price="60.00",
+    )
+    sale = Sale.objects.create(
+        product_name=stock.product_name, quantity=2,
+        selling_price="100.00", buying_price=stock.buying_price,
+        customer_name="jane", stock=stock,
+    )
+    assert sale.profit == 80
+
+    # Restocking at a higher cost must not rewrite the profit already booked.
+    stock.buying_price = "90.00"
+    stock.save(update_fields=["buying_price"])
+    sale.refresh_from_db()
+    assert sale.profit == 80
+
+
+@pytest.mark.django_db
+def test_deleting_stock_keeps_the_sale_record():
+    from Alltechmanagement.models import Sale, Stock
+    stock = Stock.objects.create(
+        product_name="Screen C", quantity=1, selling_price="50.00",
+    )
+    sale = Sale.objects.create(
+        product_name=stock.product_name, quantity=1,
+        selling_price="50.00", customer_name="jane", stock=stock,
+    )
+    stock.delete()
+    sale.refresh_from_db()
+    # A sale is a historical record; it must survive the item being removed,
+    # keeping the name and price it was actually sold under.
+    assert sale.product_name == "Screen C"
+    assert sale.selling_price == Decimal("50.00")
+    assert sale.stock is None
+
+
+@pytest.mark.django_db
+def test_money_properties_survive_string_assignment():
+    from Alltechmanagement.models import Sale
+    # Django leaves Python-assigned values untouched until reload, so a string
+    # price would make `price * quantity` string repetition rather than
+    # arithmetic. That produced "100.00100.00100.00" as a money amount.
+    sale = Sale(product_name="X", quantity=3, selling_price="100.00", buying_price="60.00")
+    assert sale.total_amount == Decimal("300.00")
+    assert sale.profit == Decimal("120.00")

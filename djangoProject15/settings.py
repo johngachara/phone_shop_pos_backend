@@ -117,6 +117,17 @@ CORS_ALLOWED_ORIGINS = [
 # bare IP over HTTP before TLS is terminated in front of it, without the far worse
 # workaround of turning DEBUG on in production. Turn it back on (drop the env var)
 # the moment certificates are in place -- HSTS below is meaningless without it.
+# TLS is terminated ahead of this process (Cloudflare at the edge, nginx at the
+# origin), so the request arrives over plain HTTP and request.is_secure() is
+# False unless Django is told how to recognise a forwarded HTTPS request.
+# Without this, SECURE_SSL_REDIRECT below redirects to https, the proxy forwards
+# the result back over http, and the browser loops until it gives up.
+#
+# Only safe because nothing reaches this process except through that proxy; a
+# directly reachable origin would let a client forge the header. The origin must
+# stay firewalled to the proxy.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
     SECURE_HSTS_SECONDS = 31536000  # 1 year
@@ -171,6 +182,15 @@ RATELIMIT_IP_META_KEY = lambda request: request.META.get('HTTP_X_FORWARDED_FOR',
 
 # settings.py
 
+# DB_SCHEMA confines every table this project owns to one Postgres schema. The
+# Supabase instance is shared with other applications, so writing into `public`
+# means competing for table names with them.
+#
+# The search path is deliberately the schema alone, with no `public` fallback.
+# Including public would let Django resolve an existing public.django_migrations
+# and conclude that migrations it has never applied here were already done.
+DB_SCHEMA = os.getenv('DB_SCHEMA')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -181,6 +201,10 @@ DATABASES = {
         'PORT': os.getenv('DB_PORT'),
     }
 }
+
+if DB_SCHEMA:
+    DATABASES['default'].setdefault('OPTIONS', {})
+    DATABASES['default']['OPTIONS']['options'] = f'-c search_path={DB_SCHEMA}'
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -275,6 +299,13 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 KEY = os.path.join(BASE_DIR, 'key_pair.json')
+# Containers log to stdout so `docker logs` and the platform's log collector can
+# see them. Writing django.log into the working directory meant logs died with
+# the container and were invisible to anything outside it. Set LOG_FILE to opt
+# back into a file for local debugging.
+LOG_FILE = os.getenv('LOG_FILE')
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -289,35 +320,32 @@ LOGGING = {
         },
     },
     'handlers': {
-        'django_file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': 'django.log',
-            'formatter': 'verbose',
-        },
-        'scheduler_file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': 'scheduler.log',
-            'formatter': 'verbose',
-        },
         'console': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+            'formatter': 'verbose',
         },
     },
     'loggers': {
         'django': {
-            'handlers': ['django_file', 'console'],
-            'level': 'INFO',
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
             'propagate': True,
         },
         'scheduler': {
-            'handlers': ['scheduler_file', 'console'],
-            'level': 'DEBUG',
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
             'propagate': True,
         },
     },
 }
 
+if LOG_FILE:
+    LOGGING['handlers']['file'] = {
+        'level': 'DEBUG',
+        'class': 'logging.FileHandler',
+        'filename': LOG_FILE,
+        'formatter': 'verbose',
+    }
+    for _logger in LOGGING['loggers'].values():
+        _logger['handlers'].append('file')

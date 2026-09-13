@@ -17,7 +17,16 @@ from django.core.exceptions import ValidationError
 from django.db.utils import DatabaseError
 
 from Alltechmanagement.clerk_auth_class import ClerkAuthentication
-from Alltechmanagement.models import RECEIPTS2_FIX
+from Alltechmanagement.models import Sale
+
+
+def completed_sales():
+    """Every paid sale.
+
+    What RECEIPTS2_FIX used to hold. Receipts are no longer a separate table
+    written alongside the sale -- a completed sale is the receipt.
+    """
+    return Sale.objects.filter(status=Sale.Status.COMPLETED)
 from Alltechmanagement.throttles import  DashBoardThrottle
 
 logger = logging.getLogger('django')
@@ -64,7 +73,7 @@ def main_dashboard(request):
 
         if cached_data is None:
             # Today's metrics (current year only)
-            today_metrics = RECEIPTS2_FIX.objects.filter(
+            today_metrics = completed_sales().filter(
                 created_at__date=today,
                 created_at__year=current_year
             ).aggregate(
@@ -81,7 +90,7 @@ def main_dashboard(request):
 
             # Compare with yesterday (current year)
             yesterday = today - timedelta(days=1)
-            yesterday_metrics = RECEIPTS2_FIX.objects.filter(
+            yesterday_metrics = completed_sales().filter(
                 created_at__date=yesterday,
                 created_at__year=current_year
             ).aggregate(
@@ -92,14 +101,14 @@ def main_dashboard(request):
             current_week_start = today - timedelta(days=today.weekday())
             last_week_start = current_week_start - timedelta(days=7)
 
-            current_week_sales = RECEIPTS2_FIX.objects.filter(
+            current_week_sales = completed_sales().filter(
                 created_at__date__gte=current_week_start,
                 created_at__year=current_year
             ).aggregate(
                 total_sales=Sum(F('selling_price') * F('quantity'))
             )
 
-            last_week_sales = RECEIPTS2_FIX.objects.filter(
+            last_week_sales = completed_sales().filter(
                 created_at__date__range=[last_week_start, current_week_start - timedelta(days=1)],
                 created_at__year=current_year
             ).aggregate(
@@ -107,7 +116,7 @@ def main_dashboard(request):
             )
 
             # All-time totals for comparison
-            all_time_totals = RECEIPTS2_FIX.objects.aggregate(
+            all_time_totals = completed_sales().aggregate(
                 total_sales=Sum(F('selling_price') * F('quantity')),
                 total_orders=Count('id'),
                 total_customers=Count('customer_name', distinct=True)
@@ -158,7 +167,7 @@ def weekly_analysis(request):
         cached_data = cache.get(cache_key)
         if cached_data is None:
             # Current year weekly data
-            weekly_data = RECEIPTS2_FIX.objects.filter(
+            weekly_data = completed_sales().filter(
                 created_at__date__range=[start_date, end_date],
                 created_at__year=current_year
             ).annotate(
@@ -174,7 +183,7 @@ def weekly_analysis(request):
             ).order_by('-week')
 
             # Historical comparison
-            previous_year_data = RECEIPTS2_FIX.objects.filter(
+            previous_year_data = completed_sales().filter(
                 created_at__year=current_year - 1
             ).annotate(
                 week=TruncWeek('created_at')
@@ -211,7 +220,7 @@ def monthly_analysis(request):
 
         if monthly_data is None:
             # Current year monthly data
-            monthly_data = RECEIPTS2_FIX.objects.filter(
+            monthly_data = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 month=TruncMonth('created_at')
@@ -224,7 +233,7 @@ def monthly_analysis(request):
             ).order_by('-month')
 
             # Best-selling products per month (current year)
-            best_selling_products = RECEIPTS2_FIX.objects.filter(
+            best_selling_products = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 month=TruncMonth('created_at')
@@ -233,7 +242,7 @@ def monthly_analysis(request):
             ).order_by('month', '-total_quantity')
 
             # Historical comparison
-            historical_comparison = RECEIPTS2_FIX.objects.annotate(
+            historical_comparison = completed_sales().annotate(
                 year=ExtractYear('created_at'),
                 month=TruncMonth('created_at')
             ).values('year', 'month').annotate(
@@ -291,7 +300,7 @@ def yearly_analysis(request):
         cached_data = cache.get(cache_key)
         if cached_data is None:
             # Current year detailed data
-            current_year_data = RECEIPTS2_FIX.objects.filter(
+            current_year_data = completed_sales().filter(
                 created_at__year=current_year
             ).aggregate(
                 total_sales=Sum(F('selling_price') * F('quantity')),
@@ -304,7 +313,7 @@ def yearly_analysis(request):
             )
 
             # Historical yearly data
-            yearly_data = RECEIPTS2_FIX.objects.annotate(
+            yearly_data = completed_sales().annotate(
                 year=ExtractYear('created_at')
             ).values('year').annotate(
                 total_sales=Sum(F('selling_price') * F('quantity')),
@@ -315,7 +324,7 @@ def yearly_analysis(request):
             ).order_by('-year')
 
             # Monthly breakdown for year-over-year comparison
-            monthly_breakdown = RECEIPTS2_FIX.objects.annotate(
+            monthly_breakdown = completed_sales().annotate(
                 year=ExtractYear('created_at'),
                 month=ExtractMonth('created_at')
             ).values('year', 'month').annotate(
@@ -352,7 +361,7 @@ def customer_insights(request):
         if cached_data is None:
 
             # Current year top customers
-            current_year_top_customers = RECEIPTS2_FIX.objects.filter(
+            current_year_top_customers = completed_sales().filter(
                 created_at__year=current_year
             ).values('customer_name').annotate(
                 total_spent=Sum(F('selling_price') * F('quantity')),
@@ -366,7 +375,7 @@ def customer_insights(request):
             ).order_by('-total_spent')[:20]
 
             # All-time top customers
-            all_time_top_customers = RECEIPTS2_FIX.objects.values('customer_name').annotate(
+            all_time_top_customers = completed_sales().values('customer_name').annotate(
                 total_spent=Sum(F('selling_price') * F('quantity')),
                 purchase_count=Count('id'),
                 average_order_value=Avg(F('selling_price') * F('quantity')),
@@ -378,7 +387,7 @@ def customer_insights(request):
             ).order_by('-total_spent')[:20]
 
             # Customer purchase frequency analysis
-            frequency_analysis = RECEIPTS2_FIX.objects.filter(
+            frequency_analysis = completed_sales().filter(
                 created_at__year=current_year
             ).values('customer_name').annotate(
                 purchase_count=Count('created_at', distinct=True)
@@ -415,7 +424,7 @@ def product_insights(request):
         if cached_data is None:
 
             #Current year product performance
-            current_year_performance = RECEIPTS2_FIX.objects.filter(
+            current_year_performance = completed_sales().filter(
                 created_at__year=current_year
             ).values('product_name').annotate(
                 total_revenue=Sum(F('selling_price') * F('quantity')),
@@ -428,7 +437,7 @@ def product_insights(request):
             ).order_by('-total_revenue')
 
             # All-time product performance
-            all_time_performance = RECEIPTS2_FIX.objects.values('product_name').annotate(
+            all_time_performance = completed_sales().values('product_name').annotate(
                 total_revenue=Sum(F('selling_price') * F('quantity')),
                 units_sold=Sum('quantity'),
                 average_price=Avg('selling_price'),
@@ -439,7 +448,7 @@ def product_insights(request):
             ).order_by('-total_revenue')
 
             # Monthly trends for current year
-            monthly_trends = RECEIPTS2_FIX.objects.filter(
+            monthly_trends = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 month=TruncMonth('created_at')
@@ -451,7 +460,7 @@ def product_insights(request):
 
             # Product growth comparison (current year vs previous year)
             previous_year = current_year - 1
-            growth_comparison = RECEIPTS2_FIX.objects.filter(
+            growth_comparison = completed_sales().filter(
                 created_at__year__in=[current_year, previous_year]
             ).annotate(
                 year=ExtractYear('created_at')
@@ -490,7 +499,7 @@ def sales_patterns(request):
         cached_data = cache.get(cache_key)
         if cached_data is None:
             # Daily patterns for current year
-            daily_patterns = RECEIPTS2_FIX.objects.filter(
+            daily_patterns = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 day=ExtractDay('created_at')
@@ -502,7 +511,7 @@ def sales_patterns(request):
             ).order_by('day')
 
             # Hour of day analysis for current year
-            hourly_patterns = RECEIPTS2_FIX.objects.filter(
+            hourly_patterns = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 hour=ExtractHour('created_at')
@@ -513,7 +522,7 @@ def sales_patterns(request):
             ).order_by('hour')
 
             # Day of week analysis
-            day_of_week_patterns = RECEIPTS2_FIX.objects.filter(
+            day_of_week_patterns = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 day_of_week=ExtractDay('created_at')
@@ -525,7 +534,7 @@ def sales_patterns(request):
             ).order_by('day_of_week')
 
             # Peak sales periods
-            peak_sales = RECEIPTS2_FIX.objects.filter(
+            peak_sales = completed_sales().filter(
                 created_at__year=current_year
             ).annotate(
                 hour=ExtractHour('created_at'),
