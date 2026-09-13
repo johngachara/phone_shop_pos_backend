@@ -28,8 +28,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
 
-from Alltechmanagement.models import Accessory, Customer, Sale
+from Alltechmanagement.models import Accessory, Sale
 from Alltechmanagement.permissions import IsEmployeeOrManager
+from Alltechmanagement.views import record_customer_spend
 from Alltechmanagement.search import search_products
 from Alltechmanagement.serializers import AccessorySerializer, SellSerializer
 from Alltechmanagement.throttles import (
@@ -155,17 +156,19 @@ def delete_accessory(request, accessory_id):
 @permission_classes([IsEmployeeOrManager])
 @throttle_classes([SalesOperationsThrottle])
 def sell_accessory(request, accessory_id):
-    """Sell an accessory.
+    """Sell an accessory, either held or paid.
 
-    Completes immediately rather than being held: the original had no unpaid
-    state for accessories, and adding one would change how the counter works.
-    The row is still a normal Sale, so it reaches reporting the same way a
-    screen sale does.
+    Same two paths as a screen, and the same default: holding, because an item
+    is often handed over before it is paid for. Accessories were
+    complete-only, which meant an accessory handed over on credit had nowhere
+    to live -- it was either recorded as paid when it was not, or not recorded
+    at all.
     """
     serializer = SellSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
+    complete_now = bool(request.data.get('complete'))
     quantity = serializer.validated_data['quantity']
     customer_name = serializer.validated_data['customer_name'].lower()
 
@@ -191,24 +194,31 @@ def sell_accessory(request, accessory_id):
                 customer_name=customer_name,
                 accessory=accessory,
                 item_type=Sale.ItemType.ACCESSORY,
-                status=Sale.Status.COMPLETED,
-                completed_at=timezone.now(),
+                status=(
+                    Sale.Status.COMPLETED if complete_now else Sale.Status.PENDING
+                ),
+                completed_at=timezone.now() if complete_now else None,
             )
 
-            customer, created = Customer.objects.get_or_create(
-                name=customer_name, defaults={'total_spent': sale.total_amount}
-            )
-            if not created:
-                Customer.objects.filter(pk=customer.pk).update(
-                    total_spent=F('total_spent') + sale.total_amount
-                )
+            # A held sale owes nothing yet. The customer's total moves when the
+            # order is completed, not when the item leaves the shelf.
+            if complete_now:
+                record_customer_spend(customer_name, sale.total_amount)
 
             accessory.refresh_from_db()
     except Accessory.DoesNotExist:
         return Response({'error': 'Item not found'}, status=404)
     cache.delete(CACHE_KEY)
 
-    from Alltechmanagement.admin_apis import invalidate_dashboard_caches
-    invalidate_dashboard_caches()
+    if complete_now:
+        from Alltechmanagement.admin_apis import invalidate_dashboard_caches
+        invalidate_dashboard_caches()
 
-    return Response({'message': 'Sold', 'sale_id': sale.id}, status=200)
+    return Response(
+        {
+            'message': 'Sold' if complete_now else 'On hold',
+            'sale_id': sale.id,
+            'status': sale.status,
+        },
+        status=200,
+    )
