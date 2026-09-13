@@ -67,9 +67,9 @@ def fetch_daily_transactions(date: str = None) -> str:
         end_date = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")  # Next day
 
         # Perform the query
-        query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
+        query = get_supabase_client().table("sales").select(
             "product_name", "selling_price", "customer_name"
-        ).gte("created_at", start_date).lt("created_at", end_date).execute()
+        ).eq("status", "COMPLETED").gte("created_at", start_date).lt("created_at", end_date).execute()
 
 
         return json.dumps({
@@ -94,9 +94,9 @@ def fetch_week_transactions(start_date: str = None, end_date: str = None) -> str
         start_date_object = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date_object = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-        query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
+        query = get_supabase_client().table("sales").select(
             "product_name", "selling_price", "product_name", "customer_name"
-        ).gte("created_at", start_date_object).lte("created_at", end_date_object).execute()
+        ).eq("status", "COMPLETED").gte("created_at", start_date_object).lte("created_at", end_date_object).execute()
 
         return json.dumps({
             "success": True,
@@ -128,14 +128,14 @@ def compare_sales_and_stock(start_date: str = None, end_date: str = None) -> str
         next_day_string = (end_date_object + timedelta(days=1)).strftime("%Y-%m-%d")
 
         # Fetch transactions for the provided date range
-        receipts_query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
+        receipts_query = get_supabase_client().table("sales").select(
             "product_name, selling_price, customer_name"
-        ).gte("created_at", start_date_string).lt("created_at", next_day_string).execute()
+        ).eq("status", "COMPLETED").gte("created_at", start_date_string).lt("created_at", next_day_string).execute()
 
         transactions = receipts_query.data
 
         # Fetch current stock where quantity is low
-        stock_query = get_supabase_client().table("Alltechmanagement_shop2_stock_fix").select(
+        stock_query = get_supabase_client().table("stock").select(
             "product_name, quantity"
         ).lte("quantity", 3).execute()
 
