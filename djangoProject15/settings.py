@@ -246,6 +246,15 @@ SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 # cold requests -- see supabase_auth.py.
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
 
+# --- Passkeys (WebAuthn) ---
+# The relying-party id is the site's registered domain (no scheme, no port) and
+# the origin is the exact URL the browser reports. A mismatch in either makes
+# every assertion fail with a message that does not say which one is wrong, so
+# they are configuration rather than guesses derived from the request -- a
+# request-derived value would also let a caller choose its own origin.
+WEBAUTHN_RP_ID = os.getenv('WEBAUTHN_RP_ID')
+WEBAUTHN_ORIGIN = os.getenv('WEBAUTHN_ORIGIN')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'Alltechmanagement.supabase_auth.SupabaseJWTAuthentication',

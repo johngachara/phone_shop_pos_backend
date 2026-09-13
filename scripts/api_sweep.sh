@@ -90,6 +90,23 @@ sweep GET  /api/daily-ai/                     "401|403"
 sweep GET  /api/weekly-ai/                    "401|403"
 
 echo
+echo "Accessories (ported from sequelizer)"
+sweep GET    /api/accessories/                "200|401|403"
+sweep GET    /api/accessories/1/              "200|401|403|404"
+sweep POST   /api/accessories/add/            "201|400|401|403"
+sweep PATCH  /api/accessories/1/update/       "200|400|401|403|404"
+sweep DELETE /api/accessories/1/delete/       "204|401|403|404"
+sweep POST   /api/accessories/1/sell/         "200|400|401|403|404"
+
+echo
+echo "Passkeys"
+sweep GET  /api/passkeys/                     "200|401|403"
+sweep POST /api/passkeys/register/options/    "200|400|401|403|503"
+sweep POST /api/passkeys/register/verify/     "400|401|403|503"
+sweep POST /api/passkeys/auth/options/        "200|400|401|403|503"
+sweep POST /api/passkeys/auth/verify/         "400|401|403|503"
+
+echo
 echo "User administration (manager only)"
 sweep GET /api/users/                         "200|401|403"
 

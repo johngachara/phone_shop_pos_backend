@@ -28,6 +28,8 @@ redis>=7.4.0
 meilisearch>=0.40.0
 
 # --- Identity ---
+# Passkeys, the second step of sign-in.
+webauthn>=2.5.0
 # Supabase is the only identity provider. firebase_admin remains for FCM push.
 supabase>=2.28.3
 PyJWT>=2.12.1
