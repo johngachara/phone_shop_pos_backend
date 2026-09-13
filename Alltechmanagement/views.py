@@ -21,6 +21,7 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import IsAuthenticated
 from Alltechmanagement.permissions import IsEmployeeOrManager, IsMachineClient, IsManager
 from Alltechmanagement.push import notify_managers
+from Alltechmanagement.search import search_products
 from rest_framework.response import Response
 from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
@@ -36,15 +37,9 @@ from Alltechmanagement.serializers import (
 )
 from Alltechmanagement.throttles import InventoryCheckThrottle, SalesOperationsThrottle, InventoryModificationThrottle, \
     OrderManagementThrottle, WeeklyEmailAPIThrottle
-import meilisearch
 import logging
 from xhtml2pdf import pisa
 load_dotenv()
-client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH_KEY'))
-
-# An index is where the documents are stored.
-index = client.index('Shop2Stock')
-
 logger = logging.getLogger('django')
 
 
@@ -99,14 +94,30 @@ def log_db_queries(f):
 @permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
 def get_shop2_stock(request):
-    cache_key = 'SHOP_STOCK'
-    cached_data = cache.get(cache_key)
-    if cached_data is None:
-        cached_data = Stock.objects.all()
-        cache.set(cache_key, cached_data, timeout=60 * 120)
-    pagination_class = CustomPagination
-    paginator = pagination_class()
-    paginated_queryset = paginator.paginate_queryset(cached_data, request)
+    """Shop stock, optionally filtered by `q`.
+
+    Search is done here rather than in the browser because the list is
+    paginated: filtering client-side only ever searches the page that happens
+    to be loaded, which looks like "we do not stock that" when the item is on
+    page two.
+
+    A search is not cached. The cache holds the unfiltered first page, which is
+    what the counter opens on; caching every distinct query would fill Redis
+    with single-use entries.
+    """
+    query = (request.GET.get('q') or '').strip()
+
+    if query:
+        queryset = search_products(Stock.objects.all(), query)
+    else:
+        cache_key = 'SHOP_STOCK'
+        queryset = cache.get(cache_key)
+        if queryset is None:
+            queryset = Stock.objects.all()
+            cache.set(cache_key, queryset, timeout=60 * 120)
+
+    paginator = CustomPagination()
+    paginated_queryset = paginator.paginate_queryset(queryset, request)
     serializer = StockSerializer(paginated_queryset, many=True)
     return paginator.get_paginated_response(serializer.data)
 
@@ -193,21 +204,6 @@ async def sell_api(request, product_id):
 
         # Handle non-critical async operations
         async def async_operations():
-            try:
-                # Update search index
-                body = {
-                    'id': product_id,
-                    'product_name': serializer.validated_data['product_name'],
-                    'price': int(serializer.validated_data['price']),
-                    'quantity': product.quantity,
-                }
-
-                response = index.update_documents([body])
-                logger.info(response)
-            except Exception as e:
-                print(f"Error updating index: {e}")
-
-            # Clear cache using async cache operations
             await cache.adelete(f'SHOP_STOCK_{product_id}')
             await cache.adelete('SHOP_STOCK')
 
@@ -297,19 +293,9 @@ async def add_stock2_api(request):
             if not instance:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Prepare index data
-            body = {
-                'id': serializer_data['id'],
-                'product_name': serializer_data['product_name'],
-                'price': serializer_data['price'],
-                'quantity': serializer_data['quantity'],
-            }
-
             # Handle non-critical operations
             async def async_operations():
                 try:
-                    result = index.add_documents(body)
-                    logger.info(result)
                     await cache.adelete('SHOP_STOCK')
                 except Exception as e:
                     print(f"Error in async operations: {e}")
@@ -355,7 +341,6 @@ async def delete_stock2_api(request, id):
         # Handle non-critical operations
         async def async_operations():
             try:
-                index.delete_document(id)
                 await cache.adelete(f'SHOP_STOCK_{id}')
                 await cache.adelete('SHOP_STOCK')
             except Exception as e:
@@ -397,13 +382,6 @@ async def update_stock2_api(request, id):
         # Handle non-critical operations
         async def async_operations():
             try:
-                body = {
-                    'id': id,
-                    'product_name': serializer_data['product_name'],
-                    'price': serializer_data['price'],
-                    'quantity': serializer_data['quantity'],
-                }
-                index.update_documents([body])
                 await cache.adelete(f'SHOP_STOCK_{id}')
                 await cache.adelete('SHOP_STOCK')
             except Exception as e:
@@ -466,13 +444,6 @@ async def refund2_api(request, id):
         # Handle non-critical operations
         async def async_operations():
             try:
-                body = {
-                    'id': item.id,
-                    'product_name': item.product_name,
-                    'price': int(item.selling_price),
-                    'quantity': item.quantity,
-                }
-                index.update_documents([body])
                 await cache.adelete('SHOP_STOCK')
             except Exception as e:
                 logging.error(f"Error in async operations: {e}")

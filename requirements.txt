@@ -25,7 +25,6 @@ whitenoise>=6.12.0
 # --- Data stores ---
 psycopg2-binary>=2.9.11
 redis>=7.4.0
-meilisearch>=0.40.0
 
 # --- Identity ---
 # Passkeys, the second step of sign-in.

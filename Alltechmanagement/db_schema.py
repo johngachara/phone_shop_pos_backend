@@ -43,10 +43,24 @@ def _apply_search_path(sender, connection, **kwargs):
     if not schema:
         return
 
+    # Extensions live in their own schema and have to be reachable, or their
+    # functions and operators do not resolve. On Supabase pg_trgm is installed
+    # into `public`, so trigram search fails with "function word_similarity
+    # does not exist" unless that schema is on the path.
+    #
+    # It is appended, never first: `current_schema()` stays the app's schema,
+    # so every table this project creates still lands there. The extension
+    # schema is consulted only for names the app schema does not define, and
+    # this project defines every table it uses.
+    extensions = getattr(settings, 'DB_EXTENSIONS_SCHEMA', None)
+    path = f'"{schema}"'
+    if extensions and extensions != schema:
+        path += f', "{extensions}"'
+
     with connection.cursor() as cursor:
         # Quoted to keep an identifier with unusual characters from being
         # interpreted as a list of schemas.
-        cursor.execute(f'SET search_path TO "{schema}"')
+        cursor.execute(f'SET search_path TO {path}')
         cursor.execute('SELECT current_schema()')
         actual = cursor.fetchone()[0]
 
