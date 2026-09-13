@@ -20,7 +20,6 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from Alltechmanagement.FCMManager import get_ref
 from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
@@ -37,7 +36,6 @@ import meilisearch
 import logging
 from xhtml2pdf import pisa
 load_dotenv()
-ref = get_ref()
 client = meilisearch.Client(os.getenv('MEILISEARCH_URL'), os.getenv('MEILISEARCH_KEY'))
 
 # An index is where the documents are stored.

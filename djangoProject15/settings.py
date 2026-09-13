@@ -28,9 +28,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+# Defaults to off. The local stack sets DEBUG=True in .env so that
+# SECURE_SSL_REDIRECT below does not bounce plain-HTTP test traffic to https.
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', os.getenv('SERVER_URL'), os.getenv('SERVER_IP')]
+# getenv returns None for anything unset, and a None in ALLOWED_HOSTS makes every
+# host check raise rather than simply fail, so filter before assigning.
+ALLOWED_HOSTS = [h for h in [
+    '127.0.0.1',
+    'localhost',
+    'web',
+    os.getenv('SERVER_URL'),
+    os.getenv('SERVER_IP'),
+] if h]
 
 # Application definition
 
@@ -103,8 +113,12 @@ CORS_ALLOWED_ORIGINS = [
 
 ]
 # HSTS settings
+# SECURE_SSL_REDIRECT is separately switchable so a server can be brought up on a
+# bare IP over HTTP before TLS is terminated in front of it, without the far worse
+# workaround of turning DEBUG on in production. Turn it back on (drop the env var)
+# the moment certificates are in place -- HSTS below is meaningless without it.
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -160,7 +174,7 @@ RATELIMIT_IP_META_KEY = lambda request: request.META.get('HTTP_X_FORWARDED_FOR',
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
+        'NAME': os.getenv('DB_NAME', 'postgres'),
         'USER': os.getenv('DB_CRED'),
         'PASSWORD': os.getenv('DB_PASS'),
         'HOST': os.getenv('DB_HOST'),
