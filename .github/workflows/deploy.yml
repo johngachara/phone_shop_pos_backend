@@ -1,0 +1,124 @@
+name: Build and deploy backend
+
+# Only alltechv2 and prod-test build images. A feature branch that happens to
+# pass CI should not be able to replace what is running in the shop.
+on:
+  push:
+    branches: [alltechv2, prod-test]
+  workflow_dispatch:
+
+env:
+  IMAGE: gachar4/alltech-backend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Migrations are checked before anything is built. A model changed
+      # without a migration fails here rather than at container start on the
+      # server, where the fix is a redeploy under pressure.
+      - name: Check for missing migrations
+        env: &test_env
+          SECRET_KEY: test-secret-key-for-ci
+          DEBUG: 'True'
+          DB_NAME: postgres
+          DB_CRED: postgres
+          DB_PASS: postgres
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          REDIS_URL: redis://localhost:6379/0
+          MEILISEARCH_URL: http://localhost:7700
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run tests
+        env: *test_env
+        run: pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Tagged with the commit sha as well as a branch tag, so a bad deploy can
+      # be rolled back to an exact build rather than to whatever "latest"
+      # happens to point at now.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only the release branch deploys. prod-test builds an image to pull by
+    # hand; it does not restart the shop's backend on its own.
+    if: github.ref_name == 'alltechv2'
+    steps:
+      - name: Pull and restart on the server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/alltech/backend
+
+            docker compose pull web
+            # Migrations run from the entrypoint on start; this is the only
+            # path by which schema changes reach the database.
+            docker compose up -d web
+
+            # A deploy that leaves the service unhealthy is a failed deploy,
+            # not a finished one. Fail loudly rather than reporting success.
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8000/api/health/ >/dev/null; then
+                echo "healthy after ${i} attempts"
+                exit 0
+              fi
+              sleep 4
+            done
+            echo "service did not become healthy; recent logs:"
+            docker compose logs --tail 50 web
+            exit 1
