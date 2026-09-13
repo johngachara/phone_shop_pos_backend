@@ -227,3 +227,39 @@ def test_push_failure_does_not_raise():
 def test_no_manager_devices_is_not_an_error():
     from Alltechmanagement.push import notify_managers
     assert notify_managers('Title', 'Body') == 0
+
+
+# --- sales report configuration ----------------------------------------------
+
+@pytest.mark.django_db
+def test_sales_report_says_what_is_missing_rather_than_failing_generically(monkeypatch):
+    """A missing mail key must not look like a server fault.
+
+    This surfaced as a bare 500 from a scheduled job: the real cause was a
+    rejected Resend key, which is trivial to fix once it is visible and
+    impossible to find when it is not.
+    """
+    from Alltechmanagement.models import Sale
+    from django.utils import timezone
+
+    Sale.objects.create(
+        product_name='A', quantity=1, selling_price=Decimal('100.00'),
+        customer_name='x', status=Sale.Status.COMPLETED, completed_at=timezone.now(),
+    )
+    for name in ('RESEND_API_KEY', 'RESEND_SENDER_EMAIL', 'GMAIL_RECEIVER'):
+        monkeypatch.delenv(name, raising=False)
+
+    from Alltechmanagement import views
+    from rest_framework.test import APIRequestFactory, force_authenticate
+
+    class Machine:
+        is_authenticated = True
+        id = None
+        firebase_uid = 'celery'
+
+    request = APIRequestFactory().get('/api/send_sale2')
+    force_authenticate(request, user=Machine())
+    response = views.send_sales2_api(request)
+
+    assert response.status_code == 503
+    assert 'RESEND_API_KEY' in response.data['error']

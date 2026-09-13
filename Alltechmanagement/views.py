@@ -492,8 +492,21 @@ async def refund2_api(request, id):
 @permission_classes([IsMachineClient])
 @throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales2_api(request):
+    # Checked up front rather than discovered as a failure three steps in.
+    # Missing configuration is not a server fault, and reporting it as one
+    # sends whoever is on call looking for a bug that is not there.
+    missing = [
+        name for name in ('RESEND_API_KEY', 'RESEND_SENDER_EMAIL', 'GMAIL_RECEIVER')
+        if not os.getenv(name)
+    ]
+    if missing:
+        logger.error("Sales report not configured; missing: %s", ', '.join(missing))
+        return Response(
+            {'error': f"Email is not configured. Missing: {', '.join(missing)}."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
     try:
-        # Set Resend API key
         resend.api_key = os.getenv("RESEND_API_KEY")
 
         # Completed sales that have not yet appeared in a report. This used
@@ -559,8 +572,15 @@ def send_sales2_api(request):
 
         return Response("Email with PDF sent successfully!")
     except Exception as e:
-        logging.error(f"Error in send_completed_transactions_email: {str(e)}")
-        return Response('An internal error occurred.', status=500)
+        # The message is logged in full and summarised to the caller. A bare
+        # "an internal error occurred" left a scheduled job with nothing to act
+        # on -- the actual cause here was a rejected Resend key, which is a
+        # five-second fix once you can see it.
+        logging.error("Error in send_completed_transactions_email: %s", e, exc_info=True)
+        return Response(
+            {'error': f'Could not send the sales report: {e}'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
 
 
 '''
