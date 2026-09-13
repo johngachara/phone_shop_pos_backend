@@ -206,3 +206,35 @@ def test_unknown_algorithm_is_rejected(client):
                'exp': int(time.time()) + 600, 'app_metadata': alltech('manager')}
     token = jwt.encode(payload, TEST_SECRET, algorithm='HS512')
     assert auth(client, token).get('/api/get_shop2_stock').status_code == 401
+
+
+# --- the machine-token endpoint ----------------------------------------------
+
+@pytest.mark.django_db
+def test_machine_token_endpoint_does_not_require_a_token(client, settings):
+    """The one endpoint that must never require authentication.
+
+    It is where a background job obtains its credential, so demanding one is a
+    deadlock the caller cannot escape. The project-wide default permission
+    applied here silently and broke every scheduled job; this test exists so
+    that cannot happen again unnoticed.
+    """
+    settings.CELERY_API_KEY = 'a-test-machine-key'
+
+    response = client.post('/api/celery-token/',
+                           {'api_key': 'a-test-machine-key'}, format='json')
+    assert response.status_code == 200, response.content
+    assert 'access' in response.json()
+
+
+@pytest.mark.django_db
+def test_machine_token_endpoint_still_rejects_a_wrong_key(client, settings):
+    settings.CELERY_API_KEY = 'a-test-machine-key'
+    response = client.post('/api/celery-token/', {'api_key': 'wrong'}, format='json')
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+def test_machine_token_endpoint_requires_a_key(client, settings):
+    settings.CELERY_API_KEY = 'a-test-machine-key'
+    assert client.post('/api/celery-token/', {}, format='json').status_code == 400

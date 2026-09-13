@@ -84,7 +84,7 @@ sweep GET /api/patterns/                      "200|401|403"
 
 echo
 echo "Machine-to-machine"
-sweep POST /api/celery-token/                 "200|400|401|403|429"
+sweep POST /api/celery-token/                 "400|429"   # never 401: it issues the token
 sweep GET  /api/send_sale2                    "401|403"
 sweep GET  /api/daily-ai/                     "401|403"
 sweep GET  /api/weekly-ai/                    "401|403"

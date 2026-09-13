@@ -5,7 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, messaging, db
 from dotenv import load_dotenv
 
-from djangoProject15 import settings
+from django.conf import settings
 
 load_dotenv()
 

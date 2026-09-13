@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -6,12 +7,27 @@ import logging
 import json
 
 from Alltechmanagement.throttles import CeleryAuthTokenThrottle
-from djangoProject15 import settings
+from django.conf import settings
 
 logger = logging.getLogger('scheduler')
 
 
 class CeleryAuthTokenView(APIView):
+    """Exchange the shared machine key for a short-lived token.
+
+    Explicitly unauthenticated, and it has to be: this is where a background
+    job gets its token, so requiring one here is a deadlock -- the caller can
+    never obtain the credential the endpoint demands. The project default is
+    now IsAlltechUser, which silently applied here and broke every scheduled
+    job with "Authentication credentials were not provided".
+
+    The API key in the body is the credential. What keeps that safe is the
+    throttle: CeleryAuthTokenThrottle allows 5 attempts a day per address,
+    which is generous for three jobs and useless for guessing a key.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
     throttle_classes = [CeleryAuthTokenThrottle]
 
     def post(self, request, *args, **kwargs):
