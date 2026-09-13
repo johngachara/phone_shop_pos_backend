@@ -43,7 +43,11 @@ sweep() {
     fi
 }
 
-echo "Sweeping ${BASE_URL}"
+# ROLE tells the script which answers are correct for the supplied token.
+# Without it, a sweep that passes proves only that something responded.
+ROLE="${3:-none}"
+
+echo "Sweeping ${BASE_URL} as role=${ROLE}"
 [ -z "$TOKEN" ] && echo "(no token supplied: authenticated endpoints are expected to reject)"
 echo
 
@@ -86,9 +90,13 @@ sweep GET  /api/daily-ai/                     "401|403"
 sweep GET  /api/weekly-ai/                    "401|403"
 
 echo
-echo "Auth (removed in PR 6, expected to 404 afterwards)"
-sweep POST /api/firebase-auth/                "200|400|401|403|404|429"
-sweep POST /api/refresh-token/                "200|400|401|403|404"
+echo "User administration (manager only)"
+sweep GET /api/users/                         "200|401|403"
+
+echo
+echo "Removed auth routes (Firebase exchange, token refresh)"
+sweep POST /api/firebase-auth/                "404"
+sweep POST /api/refresh-token/                "404"
 
 echo
 printf 'passed %d, failed %d\n' "$pass" "$fail"

@@ -6,17 +6,14 @@ from .admin_apis import main_dashboard, weekly_analysis, monthly_analysis, yearl
     product_insights, sales_patterns
 from .celery_auth_api import CeleryAuthTokenView
 from .health import health
-from .firebase_auth import FirebaseAuthTokenView
-from .refresh_token_view import RefreshTokenView
+from .user_admin import UserAdminDetailView, UserAdminListView
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
 
 urlpatterns = [
     path('', views.landing, name='landing'),
     path('api/health/', health, name='health'),
-    path('api/firebase-auth/', FirebaseAuthTokenView.as_view(), name='firebase-auth'),
     path('api/get_shop2_stock', views.get_shop2_stock, name='get_shop2_stock_api'),
-    path('api/refresh-token/',RefreshTokenView.as_view(), name='refresh-token'),
     path('api/get_shop2_stock_api/<int:id>', views.get_shop2_stock_api, name='get_shop2_stock_api'),
     path('api/sell2/<int:product_id>', views.sell_api, name='sell2api'),
     path('api/saved2', views.get_saved2, name='saved_api2'),
@@ -28,6 +25,8 @@ urlpatterns = [
     path('api/send_sale2', views.send_sales2_api, name='send_sales2_api'),
     path('api/detailed/low_stock/', views.detailed_low_stock, name='detailed_lowstock'),
     path('api/celery-token/', CeleryAuthTokenView.as_view(), name='celery_token'),
+    path('api/users/', UserAdminListView.as_view(), name='user-admin-list'),
+    path('api/users/<str:user_id>/', UserAdminDetailView.as_view(), name='user-admin-detail'),
     path('api/customers/',views.get_customers, name='get_customers'),
     path('api/dashboard/', main_dashboard, name='main-dashboard'),
     path('api/weekly/', weekly_analysis, name='weekly-analysis'),

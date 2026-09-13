@@ -28,12 +28,9 @@ redis>=7.4.0
 meilisearch>=0.40.0
 
 # --- Identity ---
-# Supabase becomes the only identity provider; clerk-backend-api is still
-# imported by admin_apis.py and is removed when those endpoints move to
-# Supabase + Manager role. firebase_admin stays, for FCM push only.
+# Supabase is the only identity provider. firebase_admin remains for FCM push.
 supabase>=2.28.3
 PyJWT>=2.12.1
-clerk-backend-api>=5.0.6
 firebase_admin>=7.3.0
 
 # --- Outbound ---

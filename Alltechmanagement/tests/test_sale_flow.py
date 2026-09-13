@@ -12,29 +12,29 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from Alltechmanagement.models import Customer, Sale, Stock
+from Alltechmanagement.supabase_auth import ROLE_EMPLOYEE, SupabaseUser
 
 
-class FakeUser:
-    """Minimal stand-in for the authenticated principal.
+def make_principal(role=ROLE_EMPLOYEE):
+    """An authenticated Alltech principal.
 
-    The views only ever ask whether the caller is authenticated; there is no
-    user model behind the current JWT. Replaced by a real Supabase principal
-    when auth lands.
-
-    firebase_uid matters: the throttles key their per-user buckets on it, and a
-    principal without one falls back to the anonymous rate of 2/hour, which any
-    multi-step test trips immediately.
+    A real SupabaseUser rather than a stand-in, so these tests go through the
+    same permission classes as production. A bare object with
+    is_authenticated=True would sail past role checks that a real caller has to
+    satisfy, and the tests would pass against an endpoint that is wide open.
     """
-    is_authenticated = True
-    is_active = True
-    is_anonymous = False
-    firebase_uid = "test-principal"
+    return SupabaseUser(
+        user_id="test-principal",
+        email="till@alltechnyeri.co.ke",
+        role=role,
+        is_alltech=True,
+    )
 
 
 @pytest.fixture
 def client():
     api = APIClient()
-    api.force_authenticate(user=FakeUser())
+    api.force_authenticate(user=make_principal())
     return api
 
 
@@ -149,3 +149,19 @@ def test_pending_sales_are_not_treated_as_revenue():
     from Alltechmanagement.admin_apis import completed_sales
     assert completed_sales().count() == 1
     assert completed_sales().first().product_name == "B"
+
+
+@pytest.mark.django_db
+def test_employee_can_run_the_till_end_to_end(stock):
+    """The whole point of the employee role: run a sale without manager rights."""
+    api = APIClient()
+    api.force_authenticate(user=make_principal(ROLE_EMPLOYEE))
+
+    sale = Sale.objects.create(
+        product_name=stock.product_name, quantity=1,
+        selling_price=Decimal("5000.00"), buying_price=stock.buying_price,
+        customer_name="Jane", stock=stock,
+    )
+    assert api.post(f"/api/complete2/{sale.pk}").status_code == 200
+    # ...but analytics stay closed.
+    assert api.get("/api/dashboard/").status_code == 403

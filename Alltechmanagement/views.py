@@ -19,6 +19,7 @@ from django.db.models import DecimalField, Sum, F
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
+from Alltechmanagement.permissions import IsEmployeeOrManager, IsMachineClient, IsManager
 from rest_framework.response import Response
 from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
@@ -47,10 +48,17 @@ logger = logging.getLogger('django')
 
 
 #Custom Decorator for async api views
-def async_api_view(methods):
+def async_api_view(methods, permissions=None):
+    """api_view for coroutine handlers.
+
+    `permissions` defaults to IsEmployeeOrManager rather than IsAuthenticated:
+    this decorator previously hardcoded IsAuthenticated, so an async endpoint
+    had no way to state a role and every one of them was open to any
+    authenticated caller.
+    """
     def decorator(func):
         @api_view(methods)
-        @permission_classes([IsAuthenticated])
+        @permission_classes(permissions or [IsEmployeeOrManager])
         @wraps(func)
         def wrapper(request, *args, **kwargs):
             return asyncio.run(func(request, *args, **kwargs))
@@ -87,7 +95,7 @@ def log_db_queries(f):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
 def get_shop2_stock(request):
     cache_key = 'SHOP_STOCK'
@@ -103,7 +111,7 @@ def get_shop2_stock(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
 def get_shop2_stock_api(request, id):
     cache_key = f'SHOP_STOCK_{id}'
@@ -223,7 +231,7 @@ async def sell_api(request, product_id):
 
 @api_view(['GET'])
 @throttle_classes([InventoryCheckThrottle])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 def get_saved2(request):
     data = Sale.objects.filter(status=Sale.Status.PENDING).order_by('-created_at')
     serializer = SaleSerializer(instance=data, many=True)
@@ -231,7 +239,7 @@ def get_saved2(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 @throttle_classes([SalesOperationsThrottle])
 def complete_transaction2_api(request, transaction_id):
     with django_transaction.atomic():
@@ -480,7 +488,7 @@ async def refund2_api(request, id):
 
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsMachineClient])
 @throttle_classes([WeeklyEmailAPIThrottle])
 def send_sales2_api(request):
     try:
@@ -608,7 +616,7 @@ def send_push_notification(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
 def detailed_low_stock(request):
     threshold = int(request.GET.get('threshold', 3))  # Default threshold is 3
@@ -634,7 +642,7 @@ def custom_500(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
 def get_customers(request):
     customers = Customer.objects.all()
@@ -644,7 +652,7 @@ def get_customers(request):
 
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsMachineClient])
 @throttle_classes([WeeklyEmailAPIThrottle])
 def get_daily_ai_insights(request):
     try:
@@ -686,7 +694,7 @@ def get_daily_ai_insights(request):
 
 @api_view(['GET'])
 @authentication_classes([CeleryJWTAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsMachineClient])
 @throttle_classes([WeeklyEmailAPIThrottle])
 def get_weekly_ai_insights(request):
     try:

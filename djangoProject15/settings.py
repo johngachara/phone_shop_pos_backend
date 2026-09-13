@@ -235,9 +235,26 @@ CACHES = {
         "KEY_PREFIX": "alltech_mgmt"
     }
 }
+# --- Supabase (identity) ---
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+# Service role. Never expose this to a browser: it bypasses row-level security
+# and can rewrite any user's app_metadata, including their role.
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+# Shared HS256 secret from the Supabase dashboard (Settings -> API -> JWT
+# Secret). When present, tokens are verified in-process. When absent, tokens are
+# verified by asking Supabase, which is correct but adds a network round trip to
+# cold requests -- see supabase_auth.py.
+SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'Alltechmanagement.custom_auth.CustomJWTAuthentication',
+        'Alltechmanagement.supabase_auth.SupabaseJWTAuthentication',
+    ],
+    # No endpoint is reachable without an Alltech role unless it opts out
+    # explicitly. The previous default let any authenticated caller reach any
+    # endpoint, and a forgotten decorator left it wide open rather than closed.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'Alltechmanagement.permissions.IsAlltechUser',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',  # Only allow JSON responses
