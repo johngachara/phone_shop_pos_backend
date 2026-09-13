@@ -109,12 +109,27 @@ eq "stock unchanged after rejection" "$Q" "$(get "/api/get_shop2_stock_api/$ITEM
 
 echo
 echo "── 8. Accessory sales reach the reports ─────────────"
-SCREEN_BEFORE=$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")
-post "/api/accessories/$ACC/sell/" "{\"product_name\":\"${TAG} Cable\",\"price\":\"500.00\",\"quantity\":3,\"customer_name\":\"${TAG}acc\"}" >/dev/null
+ACC_BEFORE=$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")
+# Explicit: accessories default to holding now, like screens.
+post "/api/accessories/$ACC/sell/" "{\"product_name\":\"${TAG} Cable\",\"price\":\"500.00\",\"quantity\":3,\"customer_name\":\"${TAG}acc\",\"complete\":true}" >/dev/null
 sleep 1
-SCREEN_AFTER=$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")
-eq "accessory revenue rose by 3 x 500" "$(python3 -c "print(float('$SCREEN_BEFORE')+1500.0)")" "$SCREEN_AFTER"
+ACC_AFTER=$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")
+eq "accessory revenue rose by 3 x 500" "$(python3 -c "print(float('$ACC_BEFORE')+1500.0)")" "$ACC_AFTER"
 eq "accessory stock fell by 3" "17" "$(get "/api/accessories/$ACC/" | jq_ "d['quantity']")"
+
+echo
+echo "── 8b. A held accessory is not revenue, and refunds home ─"
+HELD_BEFORE=$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")
+AH=$(post "/api/accessories/$ACC/sell/" "{\"product_name\":\"${TAG} Cable\",\"price\":\"500.00\",\"quantity\":2,\"customer_name\":\"${TAG}hold\"}")
+AHID=$(echo "$AH" | jq_ "d['sale_id']")
+eq "held accessory is PENDING" "PENDING" "$(echo "$AH" | jq_ "d['status']")"
+eq "stock still leaves the shelf" "15" "$(get "/api/accessories/$ACC/" | jq_ "d['quantity']")"
+sleep 1
+eq "held accessory is not revenue" "$HELD_BEFORE" "$(get /api/dashboard/ | jq_ "float((d.get('by_item_type') or {}).get('ACCESSORY',{}).get('total_sales') or 0)")"
+# The trap: refund looked items up in Stock, where an accessory is not.
+post "/api/refund2/$AHID" '{}' >/dev/null
+sleep 1
+eq "refund returns it to accessories" "17" "$(get "/api/accessories/$ACC/" | jq_ "d['quantity']")"
 
 echo
 echo "── 9. A discount is honoured, not the list price ────"
