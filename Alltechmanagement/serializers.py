@@ -38,6 +38,7 @@ class StockSerializer(serializers.ModelSerializer):
             # Not required on input, because a payload may supply `price`
             # instead. to_internal_value enforces that one of them is present.
             'selling_price': {'required': False},
+            'buying_price': {'required': True, 'allow_null': False},
         }
 
     def to_internal_value(self, data):
@@ -96,6 +97,7 @@ class AccessorySerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'selling_price': {'required': False},
+            'buying_price': {'required': True, 'allow_null': False},
         }
 
     def to_internal_value(self, data):

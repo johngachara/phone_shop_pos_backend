@@ -29,9 +29,11 @@ def catalogue(db):
     for name in ('iPhone 12 Screen', 'Samsung A54 Screen',
                  'Redmi Note 12 Screen', 'Tecno Spark 10 Screen'):
         Stock.objects.create(
-            product_name=name, quantity=5, selling_price=Decimal('1000.00'))
+            product_name=name, quantity=5, selling_price=Decimal('1000.00'),
+            buying_price=Decimal('600.00'))
     Accessory.objects.create(
-        product_name='USB-C Cable 2m', quantity=10, selling_price=Decimal('450.00'))
+        product_name='USB-C Cable 2m', quantity=10, selling_price=Decimal('450.00'),
+        buying_price=Decimal('200.00'))
 
 
 def names(response):
@@ -82,9 +84,11 @@ def test_accessories_search_is_not_limited_to_the_loaded_page(client, db):
     # page 2 looked like it was not stocked.
     for i in range(60):
         Accessory.objects.create(
-            product_name=f'Filler item {i}', quantity=1, selling_price=Decimal('10.00'))
+            product_name=f'Filler item {i}', quantity=1, selling_price=Decimal('10.00'),
+            buying_price=Decimal('4.00'))
     Accessory.objects.create(
-        product_name='Wireless Charger', quantity=1, selling_price=Decimal('2500.00'))
+        product_name='Wireless Charger', quantity=1, selling_price=Decimal('2500.00'),
+        buying_price=Decimal('1200.00'))
 
     body = client.get('/api/accessories/?q=charger&page=1&limit=50').json()
     assert [i['product_name'] for i in body['items']] == ['Wireless Charger']
@@ -94,3 +98,41 @@ def test_accessories_search_is_not_limited_to_the_loaded_page(client, db):
 def test_accessories_tolerate_a_misspelling(client, catalogue):
     body = client.get('/api/accessories/?q=usbc').json()
     assert any('USB-C' in i['product_name'] for i in body['items'])
+
+
+# --- buying price is required ------------------------------------------------
+
+@pytest.mark.django_db
+def test_stock_cannot_be_added_without_a_buying_price(client):
+    """An item with no cost is invisible to every profit figure it contributes to.
+
+    Silently: the sale still happens, revenue still counts, and profit simply
+    excludes it. Rejecting the write is the only point at which anyone finds
+    out.
+    """
+    response = client.post('/api/add_stock2', {
+        'product_name': 'No Cost Screen', 'quantity': 3, 'price': '1000.00',
+    }, format='json')
+    assert response.status_code == 400
+    assert 'buying_price' in str(response.content)
+    assert not Stock.objects.filter(product_name='No Cost Screen').exists()
+
+
+@pytest.mark.django_db
+def test_accessories_cannot_be_added_without_a_buying_price(client):
+    response = client.post('/api/accessories/add/', {
+        'product_name': 'No Cost Cable', 'quantity': 3, 'price': '100.00',
+    }, format='json')
+    assert response.status_code == 400
+    assert not Accessory.objects.filter(product_name='No Cost Cable').exists()
+
+
+@pytest.mark.django_db
+def test_a_zero_buying_price_is_allowed(client):
+    # Zero is a real answer -- a giveaway, or stock that came free with an
+    # order. Absent is what is not allowed.
+    response = client.post('/api/add_stock2', {
+        'product_name': 'Free Sample', 'quantity': 1, 'price': '500.00',
+        'buying_price': '0.00',
+    }, format='json')
+    assert response.status_code == 200, response.content

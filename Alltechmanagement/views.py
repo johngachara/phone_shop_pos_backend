@@ -306,11 +306,15 @@ async def add_stock2_api(request):
 
         @sync_to_async
         def validate_and_save():
-            if serializer.is_valid(raise_exception=True):
-                with django_transaction.atomic():
-                    instance = serializer.save()
-                    return instance, serializer.data
-            return None, None
+            # raise_exception=False on purpose. Raising here throws a DRF
+            # ValidationError out of sync_to_async and into the catch-all
+            # below, which turns "you forgot the buying price" into a 500 and
+            # tells the person nothing about what to fix.
+            if not serializer.is_valid():
+                return None, None
+            with django_transaction.atomic():
+                instance = serializer.save()
+                return instance, serializer.data
 
         try:
             instance, serializer_data = await validate_and_save()
@@ -387,7 +391,7 @@ async def update_stock2_api(request, id):
         try:
             data = Stock.objects.get(pk=id)
             serializer = StockSerializer(instance=data, data=request.data, partial=True)
-            if serializer.is_valid(raise_exception=True):
+            if serializer.is_valid():
                 with django_transaction.atomic():
                     instance = serializer.save()
                     return instance, serializer.data
