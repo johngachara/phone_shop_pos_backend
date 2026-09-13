@@ -51,6 +51,45 @@ class Stock(models.Model):
         return self.product_name
 
 
+class Accessory(models.Model):
+    """An accessory held in the shop.
+
+    Ported out of Firestore, where accessories lived in an `accessories`
+    collection with auto-increment ids simulated by a `counters/accessories`
+    document. Kept as its own table rather than folded into Stock: the two are
+    separate inventories with separate search indexes and separate screens in
+    the POS, and merging them would change what every existing query means.
+
+    Sales of both land in the same `sales` table, so reporting is unified even
+    though inventory is not.
+    """
+
+    product_name = models.CharField(max_length=100, unique=True)
+    quantity = models.IntegerField(validators=[MinValueValidator(0)])
+    selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    buying_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'accessories'
+        ordering = ['product_name']
+        verbose_name_plural = 'accessories'
+
+    def __str__(self):
+        return self.product_name
+
+
 class Sale(models.Model):
     """One sale, from held order through to permanent record.
 
@@ -68,6 +107,10 @@ class Sale(models.Model):
     class Status(models.TextChoices):
         PENDING = 'PENDING', 'Pending'
         COMPLETED = 'COMPLETED', 'Completed'
+
+    class ItemType(models.TextChoices):
+        SCREEN = 'SCREEN', 'Screen'
+        ACCESSORY = 'ACCESSORY', 'Accessory'
 
     # Denormalised on purpose: a sale record must keep the name and prices it was
     # actually sold under, even if the stock item is later renamed or deleted.
@@ -90,8 +133,24 @@ class Sale(models.Model):
     )
     customer_name = models.CharField(max_length=255, default='null', db_index=True)
 
+    # Which inventory this came from. Denormalised alongside the two nullable
+    # links below so a sale still reports correctly after its item is deleted.
+    item_type = models.CharField(
+        max_length=16,
+        choices=ItemType.choices,
+        default=ItemType.SCREEN,
+        db_index=True,
+    )
+
     stock = models.ForeignKey(
         Stock,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sales',
+    )
+    accessory = models.ForeignKey(
+        'Accessory',
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -195,3 +254,39 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f"{self.token[:12]}... ({self.role or 'unassigned'})"
+
+
+class WebAuthnCredential(models.Model):
+    """A registered passkey.
+
+    Ported out of Firestore, where credentials were an array on the user
+    document. A table instead of a JSON column so a credential can be looked up
+    by its id directly, and so the signature counter can be updated without
+    rewriting every other credential the user owns.
+
+    Passkeys are the second step of sign-in: Supabase checks the password, this
+    checks the device.
+    """
+
+    # Supabase auth user id. Not a foreign key -- Supabase owns the user table
+    # and it lives outside this database.
+    user_id = models.CharField(max_length=64, db_index=True)
+    # base64url, as the browser reports it.
+    credential_id = models.CharField(max_length=512, unique=True)
+    public_key = models.TextField()
+    # Incremented by the authenticator on each use. A value that fails to
+    # advance is the signal that a credential has been cloned.
+    sign_count = models.BigIntegerField(default=0)
+    transports = models.JSONField(default=list, blank=True)
+    device_type = models.CharField(max_length=32, blank=True, default='')
+    backed_up = models.BooleanField(default=False)
+    label = models.CharField(max_length=100, blank=True, default='')
+    created_at = models.DateTimeField(default=timezone.now)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'webauthn_credentials'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.label or self.credential_id[:12]} ({self.user_id})"

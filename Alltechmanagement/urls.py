@@ -5,7 +5,22 @@ from django.conf.urls import handler404, handler500
 from .admin_apis import main_dashboard, weekly_analysis, monthly_analysis, yearly_analysis, customer_insights, \
     product_insights, sales_patterns
 from .celery_auth_api import CeleryAuthTokenView
+from .accessories import (
+    add_accessory,
+    delete_accessory,
+    get_accessory,
+    list_accessories,
+    sell_accessory,
+    update_accessory,
+)
 from .health import health
+from .webauthn_views import (
+    authentication_options,
+    list_credentials,
+    registration_options,
+    verify_authentication,
+    verify_registration,
+)
 from .user_admin import UserAdminDetailView, UserAdminListView
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
@@ -25,6 +40,17 @@ urlpatterns = [
     path('api/send_sale2', views.send_sales2_api, name='send_sales2_api'),
     path('api/detailed/low_stock/', views.detailed_low_stock, name='detailed_lowstock'),
     path('api/celery-token/', CeleryAuthTokenView.as_view(), name='celery_token'),
+    path('api/accessories/', list_accessories, name='accessory-list'),
+    path('api/accessories/add/', add_accessory, name='accessory-add'),
+    path('api/accessories/<int:accessory_id>/', get_accessory, name='accessory-detail'),
+    path('api/accessories/<int:accessory_id>/update/', update_accessory, name='accessory-update'),
+    path('api/accessories/<int:accessory_id>/delete/', delete_accessory, name='accessory-delete'),
+    path('api/accessories/<int:accessory_id>/sell/', sell_accessory, name='accessory-sell'),
+    path('api/passkeys/', list_credentials, name='passkey-list'),
+    path('api/passkeys/register/options/', registration_options, name='passkey-register-options'),
+    path('api/passkeys/register/verify/', verify_registration, name='passkey-register-verify'),
+    path('api/passkeys/auth/options/', authentication_options, name='passkey-auth-options'),
+    path('api/passkeys/auth/verify/', verify_authentication, name='passkey-auth-verify'),
     path('api/users/', UserAdminListView.as_view(), name='user-admin-list'),
     path('api/users/<str:user_id>/', UserAdminDetailView.as_view(), name='user-admin-detail'),
     path('api/customers/',views.get_customers, name='get_customers'),

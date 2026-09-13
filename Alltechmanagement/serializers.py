@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from Alltechmanagement.models import Customer, Sale, Stock
+from Alltechmanagement.models import Accessory, Customer, Sale, Stock
 
 
 class SellSerializer(serializers.Serializer):
@@ -74,3 +74,37 @@ class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = ['customer_name']
+
+
+class AccessorySerializer(serializers.ModelSerializer):
+    """Accessory, readable and writable under both price names.
+
+    Same alias as StockSerializer: the POS sends and reads `price`, the column
+    is `selling_price`. Dropped once the frontend is rebuilt.
+    """
+
+    price = serializers.DecimalField(
+        source='selling_price', max_digits=10, decimal_places=2, read_only=True
+    )
+
+    class Meta:
+        model = Accessory
+        fields = [
+            'id', 'product_name', 'quantity',
+            'selling_price', 'price', 'buying_price',
+            'created_at', 'updated_at',
+        ]
+        extra_kwargs = {
+            'selling_price': {'required': False},
+        }
+
+    def to_internal_value(self, data):
+        if 'selling_price' not in data and 'price' in data:
+            data = dict(data)
+            data['selling_price'] = data['price']
+        validated = super().to_internal_value(data)
+        if not self.partial and validated.get('selling_price') is None:
+            raise serializers.ValidationError(
+                {'selling_price': 'Either selling_price or price is required.'}
+            )
+        return validated
