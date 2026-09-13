@@ -5,6 +5,7 @@ from django.conf.urls import handler404, handler500
 from .admin_apis import main_dashboard, weekly_analysis, monthly_analysis, yearly_analysis, customer_insights, \
     product_insights, sales_patterns
 from .celery_auth_api import CeleryAuthTokenView
+from .health import health
 from .firebase_auth import FirebaseAuthTokenView
 from .refresh_token_view import RefreshTokenView
 handler404 = 'Alltechmanagement.views.custom_404'
@@ -12,6 +13,7 @@ handler500 = 'Alltechmanagement.views.custom_500'
 
 urlpatterns = [
     path('', views.landing, name='landing'),
+    path('api/health/', health, name='health'),
     path('api/firebase-auth/', FirebaseAuthTokenView.as_view(), name='firebase-auth'),
     path('api/get_shop2_stock', views.get_shop2_stock, name='get_shop2_stock_api'),
     path('api/refresh-token/',RefreshTokenView.as_view(), name='refresh-token'),

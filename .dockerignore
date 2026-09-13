@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+.venv
+alltechenv
+__pycache__/
+*.pyc
+*.log
+.env
+.env.*
+!.env.example
+sequelizer/
+qodana.sarif.json
+htmlcov/
+.pytest_cache/
+.coverage

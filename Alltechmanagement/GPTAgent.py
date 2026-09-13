@@ -8,18 +8,50 @@ from supabase import create_client, Client
 
 # Load environment variables
 load_dotenv()
-token = os.environ["GITHUB_TOKEN"]
-supabase_url = os.environ["SUPABASE_URL"]
-supabase_key = os.environ["SUPABASE_KEY"]
 endpoint = "https://models.github.ai/inference"
 model_name = "openai/gpt-4.1-mini"
 
 logger = logging.getLogger('django')
-# Initialize Supabase client
-supabase_client = create_client(supabase_url, supabase_key)
 
-# Initialize OpenAI client
-client = OpenAI(base_url=endpoint, api_key=token)
+# These used to be module-level os.environ[...] lookups plus eager client
+# construction, so importing this module -- which views.py does unconditionally --
+# raised KeyError and took the whole process down whenever the AI credentials were
+# absent. They are resolved on first use instead, and only the AI endpoints fail
+# when the keys are missing.
+#
+# This provider is GitHub Models and is being replaced by NVIDIA NIM, called
+# server-side, with stock writes routed through the REST endpoints rather than
+# straight at Supabase. See alltech-redesign-design section 2.5.
+_supabase_client = None
+_openai_client = None
+
+
+class AIConfigurationError(RuntimeError):
+    """Raised when an AI code path runs without the credentials it needs."""
+
+
+def _require_env(name):
+    value = os.getenv(name)
+    if not value:
+        raise AIConfigurationError(f"{name} is not configured")
+    return value
+
+
+def get_supabase_client():
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(
+            _require_env("SUPABASE_URL"),
+            _require_env("SUPABASE_KEY"),
+        )
+    return _supabase_client
+
+
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI(base_url=endpoint, api_key=_require_env("GITHUB_TOKEN"))
+    return _openai_client
 
 def fetch_daily_transactions(date: str = None) -> str:
     try:
@@ -35,7 +67,7 @@ def fetch_daily_transactions(date: str = None) -> str:
         end_date = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")  # Next day
 
         # Perform the query
-        query = supabase_client.table("Alltechmanagement_receipts2_fix").select(
+        query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
             "product_name", "selling_price", "customer_name"
         ).gte("created_at", start_date).lt("created_at", end_date).execute()
 
@@ -62,7 +94,7 @@ def fetch_week_transactions(start_date: str = None, end_date: str = None) -> str
         start_date_object = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date_object = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-        query = supabase_client.table("Alltechmanagement_receipts2_fix").select(
+        query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
             "product_name", "selling_price", "product_name", "customer_name"
         ).gte("created_at", start_date_object).lte("created_at", end_date_object).execute()
 
@@ -96,14 +128,14 @@ def compare_sales_and_stock(start_date: str = None, end_date: str = None) -> str
         next_day_string = (end_date_object + timedelta(days=1)).strftime("%Y-%m-%d")
 
         # Fetch transactions for the provided date range
-        receipts_query = supabase_client.table("Alltechmanagement_receipts2_fix").select(
+        receipts_query = get_supabase_client().table("Alltechmanagement_receipts2_fix").select(
             "product_name, selling_price, customer_name"
         ).gte("created_at", start_date_string).lt("created_at", next_day_string).execute()
 
         transactions = receipts_query.data
 
         # Fetch current stock where quantity is low
-        stock_query = supabase_client.table("Alltechmanagement_shop2_stock_fix").select(
+        stock_query = get_supabase_client().table("Alltechmanagement_shop2_stock_fix").select(
             "product_name, quantity"
         ).lte("quantity", 3).execute()
 
@@ -251,7 +283,7 @@ Based on the transaction data from [analyzed period], I've analyzed [number] tra
     ]
 
     # Get initial response from model
-    response = client.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model=model_name,
         messages=messages,
         tools=tools,
@@ -281,7 +313,7 @@ Based on the transaction data from [analyzed period], I've analyzed [number] tra
             })
 
         # Model re-answers after seeing the tool outputs
-        second_response = client.chat.completions.create(
+        second_response = get_openai_client().chat.completions.create(
             model=model_name,
             messages=messages,
         )
