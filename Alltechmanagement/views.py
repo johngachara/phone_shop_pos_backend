@@ -27,7 +27,7 @@ from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
-from Alltechmanagement.models import Customer, Insight, Sale, Stock
+from Alltechmanagement.models import Accessory, Customer, Insight, Sale, Stock
 from django.shortcuts import render
 from Alltechmanagement.serializers import (
     CustomerSerializer,
@@ -454,10 +454,32 @@ async def refund2_api(request, id):
                 sale = Sale.objects.select_for_update().get(
                     pk=id, status=Sale.Status.PENDING
                 )
-                item = (Stock.objects
-                        .select_for_update()
-                        .filter(product_name__iexact=sale.product_name)
-                        .first())
+
+                # Accessories can be held now too, and they live in their own
+                # table. Looking only in Stock would fail to find the item and
+                # refuse the refund, leaving the units deducted from a shelf
+                # they were never returned to.
+                if sale.item_type == Sale.ItemType.ACCESSORY:
+                    model = Accessory
+                    scope = (
+                        Accessory.objects.filter(pk=sale.accessory_id)
+                        if sale.accessory_id
+                        else Accessory.objects.filter(
+                            product_name__iexact=sale.product_name)
+                    )
+                else:
+                    model = Stock
+                    scope = (
+                        Stock.objects.filter(pk=sale.stock_id)
+                        if sale.stock_id
+                        else Stock.objects.filter(
+                            product_name__iexact=sale.product_name)
+                    )
+
+                # Matched by id first, falling back to the name. The link is
+                # cleared when a product is deleted, and the name is all a sale
+                # keeps of an item that no longer exists.
+                item = scope.select_for_update().first()
 
                 if not item:
                     return None, 'Item not found in stock'
@@ -465,28 +487,37 @@ async def refund2_api(request, id):
                 # Return every unit the order held. This restored exactly one
                 # unit before, so refunding a 3-unit order silently lost 2 from
                 # stock. F() keeps it correct against a concurrent sale.
-                Stock.objects.filter(pk=item.pk).update(
+                model.objects.filter(pk=item.pk).update(
                     quantity=F('quantity') + sale.quantity
                 )
                 sale.delete()
                 item.refresh_from_db()
-                return item, None
+                return item, sale.item_type, None
         except Sale.DoesNotExist:
-            return None, 'Transaction not found'
+            return None, None, 'Transaction not found'
         except Exception as e:
             logging.error(f"Error in process_refund: {str(e)}")
-            return None, 'An internal error has occurred.'
+            return None, None, 'An internal error has occurred.'
 
     try:
-        item, error = await process_refund()
+        item, item_type, error = await process_refund()
         if error:
             return Response({'error': 'An internal error has occurred.'}, status=404)
 
         # Handle non-critical operations
         async def async_operations():
-            # item.id, not just the list: this is the refund path, and leaving
-            # the per-item entry stale is what made refunded units invisible.
-            await invalidate_stock_cache(item.id)
+            if item_type == Sale.ItemType.ACCESSORY:
+                # The accessories list is cached under its own key.
+                from Alltechmanagement.accessories import CACHE_KEY
+                try:
+                    await cache.adelete(CACHE_KEY)
+                except Exception as exc:
+                    logging.error("Could not clear the accessory cache: %s", exc)
+            else:
+                # item.id, not just the list: this is the refund path, and
+                # leaving the per-item entry stale is what made refunded units
+                # invisible.
+                await invalidate_stock_cache(item.id)
 
         # Create background task
         await asyncio.create_task(async_operations())
