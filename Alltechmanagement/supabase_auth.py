@@ -46,6 +46,13 @@ VALID_ROLES = (ROLE_EMPLOYEE, ROLE_MANAGER)
 # long enough to keep a burst of POS requests off the network.
 REMOTE_VERIFY_CACHE_SECONDS = 60
 
+# Supabase signs with these once a project has migrated off the legacy shared
+# secret to JWT signing keys.
+ASYMMETRIC_ALGORITHMS = ('RS256', 'ES256', 'EdDSA')
+JWKS_CACHE_SECONDS = 600
+
+_jwks_client = None
+
 
 class SupabaseUser:
     """The authenticated principal.
@@ -136,10 +143,78 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
         return user, token
 
     def _verify(self, token):
-        secret = getattr(settings, 'SUPABASE_JWT_SECRET', None)
-        if secret:
-            return self._verify_locally(token, secret)
-        return self._verify_remotely(token)
+        """Pick a verification strategy from the token itself.
+
+        Supabase projects sign either with a legacy shared HS256 secret or with
+        asymmetric keys published at a JWKS endpoint. A project can be migrated
+        from the first to the second at any time, and tokens issued either way
+        may be in flight during the changeover, so the algorithm in the token
+        header decides rather than configuration.
+
+        Asymmetric verification is preferred: the verifying key is public, so
+        nothing secret has to be distributed to this service at all.
+        """
+        try:
+            header = jwt.get_unverified_header(token)
+        except jwt.InvalidTokenError:
+            raise exceptions.AuthenticationFailed('Malformed token')
+
+        algorithm = header.get('alg')
+        if algorithm in ASYMMETRIC_ALGORITHMS:
+            return self._verify_with_jwks(token, algorithm)
+
+        if algorithm == 'HS256':
+            secret = getattr(settings, 'SUPABASE_JWT_SECRET', None)
+            if secret:
+                return self._verify_locally(token, secret)
+            return self._verify_remotely(token)
+
+        # Includes alg=none, the classic forgery.
+        logger.warning("Rejected token with algorithm %r", algorithm)
+        raise exceptions.AuthenticationFailed('Unsupported token algorithm')
+
+    def _verify_with_jwks(self, token, algorithm):
+        """Verify against the project's published public keys."""
+        base_url = getattr(settings, 'SUPABASE_URL', None)
+        if not base_url:
+            raise exceptions.AuthenticationFailed('Authentication is not configured')
+
+        global _jwks_client
+        if _jwks_client is None:
+            # PyJWKClient caches keys and refetches on an unknown kid, which is
+            # what makes key rotation work without a redeploy.
+            _jwks_client = jwt.PyJWKClient(
+                f'{base_url}/auth/v1/.well-known/jwks.json',
+                cache_keys=True,
+                lifespan=JWKS_CACHE_SECONDS,
+            )
+
+        try:
+            signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        except Exception as exc:
+            logger.error("Could not resolve JWKS signing key: %s", exc)
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        try:
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[algorithm],
+                audience='authenticated',
+                options={'require': ['exp', 'sub']},
+            )
+        except jwt.ExpiredSignatureError:
+            raise exceptions.AuthenticationFailed('Token expired')
+        except jwt.InvalidTokenError as exc:
+            logger.warning("Rejected token: %s", exc)
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        return _build_user(
+            user_id=claims.get('sub'),
+            email=claims.get('email'),
+            app_metadata=claims.get('app_metadata'),
+            claims=claims,
+        )
 
     def _verify_locally(self, token, secret):
         """Verify the HS256 signature without a network call. Preferred."""

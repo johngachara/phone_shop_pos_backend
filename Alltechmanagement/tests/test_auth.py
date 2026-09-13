@@ -157,3 +157,52 @@ def test_a_user_token_cannot_reach_machine_endpoints(client, path):
 def test_health_stays_public(client):
     # The container healthcheck has no credentials.
     assert client.get('/api/health/').status_code in (200, 503)
+
+
+# --- asymmetric signing (after a project migrates off the legacy secret) -----
+
+@pytest.mark.django_db
+def test_asymmetric_token_is_verified_against_jwks(client, settings, monkeypatch):
+    """A project migrated to JWT signing keys must keep working.
+
+    Supabase can be switched from the legacy shared HS256 secret to asymmetric
+    keys at any time. Nothing secret is distributed in that mode -- the
+    verifying key is public -- so the algorithm in the token header, not
+    configuration, has to decide how a token is checked.
+    """
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from Alltechmanagement import supabase_auth
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    payload = {
+        'sub': 'user-rs', 'email': 'rs@b.co', 'aud': 'authenticated',
+        'exp': int(time.time()) + 600, 'app_metadata': alltech('manager'),
+    }
+    token = jwt.encode(payload, private_key, algorithm='RS256',
+                       headers={'kid': 'test-kid'})
+
+    class FakeKey:
+        key = private_key.public_key()
+
+    class FakeJWKSClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def get_signing_key_from_jwt(self, _token):
+            return FakeKey()
+
+    monkeypatch.setattr(supabase_auth, '_jwks_client', FakeJWKSClient())
+    settings.SUPABASE_URL = 'https://example.supabase.co'
+    # The legacy secret is present and must be ignored for an RS256 token.
+    settings.SUPABASE_JWT_SECRET = TEST_SECRET
+
+    assert auth(client, token).get('/api/dashboard/').status_code == 200
+
+
+@pytest.mark.django_db
+def test_unknown_algorithm_is_rejected(client):
+    payload = {'sub': 'x', 'aud': 'authenticated',
+               'exp': int(time.time()) + 600, 'app_metadata': alltech('manager')}
+    token = jwt.encode(payload, TEST_SECRET, algorithm='HS512')
+    assert auth(client, token).get('/api/get_shop2_stock').status_code == 401
