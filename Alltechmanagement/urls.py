@@ -15,6 +15,7 @@ from .accessories import (
 )
 from .ai.views import ai_chat, ai_confirm
 from .health import health
+from .push import register_device, unregister_device
 from .webauthn_views import (
     authentication_options,
     list_credentials,
@@ -47,6 +48,8 @@ urlpatterns = [
     path('api/accessories/<int:accessory_id>/update/', update_accessory, name='accessory-update'),
     path('api/accessories/<int:accessory_id>/delete/', delete_accessory, name='accessory-delete'),
     path('api/accessories/<int:accessory_id>/sell/', sell_accessory, name='accessory-sell'),
+    path('api/push/register/', register_device, name='push-register'),
+    path('api/push/unregister/', unregister_device, name='push-unregister'),
     path('api/ai/chat/', ai_chat, name='ai-chat'),
     path('api/ai/confirm/', ai_confirm, name='ai-confirm'),
     path('api/passkeys/', list_credentials, name='passkey-list'),

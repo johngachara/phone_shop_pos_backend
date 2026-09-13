@@ -20,6 +20,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from Alltechmanagement.permissions import IsEmployeeOrManager, IsMachineClient, IsManager
+from Alltechmanagement.push import notify_managers
 from rest_framework.response import Response
 from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
@@ -677,7 +678,21 @@ def get_daily_ai_insights(request):
 
             # If there is transaction data, run AI insights
             response_text = run_conversation(user_prompt, days=1)
-            return Response({"message": response_text}, status=status.HTTP_200_OK)
+
+            # Delivered to managers' devices rather than through a WhatsApp
+            # session driven by a headless browser. A failure here is logged
+            # and does not fail the report.
+            delivered = notify_managers(
+                "Yesterday's sales",
+                # A notification body is truncated by the OS anyway; the full
+                # text is in the app.
+                response_text[:240],
+                {"kind": "daily_insight"},
+            )
+            return Response(
+                {"message": response_text, "delivered_to_devices": delivered},
+                status=status.HTTP_200_OK,
+            )
         else:
             # If no data, respond gracefully
             return Response(
@@ -724,9 +739,17 @@ Output Requirements:
 - If possible, suggest emerging customer behavior patterns based on purchases.
 Be concise but insightful.
 """
-            response_text = run_conversation(
-               user_prompt)
-            return Response({"message": response_text}, status=status.HTTP_200_OK)
+            response_text = run_conversation(user_prompt, days=7)
+
+            delivered = notify_managers(
+                "This week's sales",
+                response_text[:240],
+                {"kind": "weekly_insight"},
+            )
+            return Response(
+                {"message": response_text, "delivered_to_devices": delivered},
+                status=status.HTTP_200_OK,
+            )
         else:
             # If no data, respond gracefully
             return Response(

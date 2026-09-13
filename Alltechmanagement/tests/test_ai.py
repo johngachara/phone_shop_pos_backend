@@ -174,3 +174,56 @@ def test_ai_endpoints_require_an_alltech_role():
     outsider = APIClient()
     outsider.force_authenticate(user=SupabaseUser(user_id="o", role=None, is_alltech=False))
     assert outsider.post("/api/ai/chat/", {"messages": []}, format="json").status_code == 403
+
+
+# --- manager-only push --------------------------------------------------------
+
+@pytest.mark.django_db
+def test_push_targets_managers_only():
+    from Alltechmanagement.models import PushDevice
+    from Alltechmanagement.push import notify_managers
+
+    PushDevice.objects.create(token='mgr-1', user_id='m1', role='manager')
+    PushDevice.objects.create(token='emp-1', user_id='e1', role='employee')
+    PushDevice.objects.create(token='none-1', user_id='x1', role=None)
+
+    with patch('Alltechmanagement.push.send_push') as send:
+        send.return_value = SimpleNamespace(success_count=1, responses=[])
+        notify_managers('Title', 'Body')
+
+    tokens = send.call_args[0][2]
+    # An employee must not receive the shop's takings on their phone.
+    assert tokens == ['mgr-1']
+
+
+@pytest.mark.django_db
+def test_registering_the_same_device_twice_reassigns_it():
+    from Alltechmanagement.models import PushDevice
+    client = APIClient()
+    client.force_authenticate(user=principal('user-a'))
+    assert client.post('/api/push/register/', {'token': 'shared-tablet'}, format='json').status_code == 201
+
+    other = APIClient()
+    other.force_authenticate(user=principal('user-b'))
+    assert other.post('/api/push/register/', {'token': 'shared-tablet'}, format='json').status_code == 200
+
+    # A counter tablet is shared. The token belongs to whoever signed in last,
+    # not to two people at once.
+    assert PushDevice.objects.count() == 1
+    assert PushDevice.objects.get().user_id == 'user-b'
+
+
+@pytest.mark.django_db
+def test_push_failure_does_not_raise():
+    from Alltechmanagement.models import PushDevice
+    from Alltechmanagement.push import notify_managers
+    PushDevice.objects.create(token='mgr-1', user_id='m1', role='manager')
+    with patch('Alltechmanagement.push.send_push', side_effect=RuntimeError('FCM down')):
+        # Reporting must not fail because a notification could not be delivered.
+        assert notify_managers('Title', 'Body') == 0
+
+
+@pytest.mark.django_db
+def test_no_manager_devices_is_not_an_error():
+    from Alltechmanagement.push import notify_managers
+    assert notify_managers('Title', 'Body') == 0
