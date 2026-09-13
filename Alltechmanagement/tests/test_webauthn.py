@@ -167,3 +167,29 @@ def test_malformed_payloads_are_client_errors_not_server_errors(client, credenti
     cache.set(f"webauthn_auth_challenge_{USER_ID}", "Y2hhbGxlbmdl", 300)
     response = client.post("/api/passkeys/auth/verify/", payload, format="json")
     assert response.status_code == 400, response.content
+
+
+@pytest.mark.django_db
+def test_options_are_returned_as_an_object_not_a_json_string(client):
+    """The response body must be a JSON object, not a string containing one.
+
+    py_webauthn's options_to_json returns a serialised string. Handing that to
+    DRF's Response encodes it a second time, so the browser receives
+    "{\\"rp\\": ...}" and every field reads as undefined --
+    navigator.credentials.create then fails with "cannot read properties of
+    undefined", which is exactly what a passkey enrolment reported.
+    """
+    body = client.post('/api/passkeys/register/options/').json()
+    assert isinstance(body, dict), f'expected an object, got {type(body).__name__}'
+    for field in ('rp', 'user', 'challenge', 'pubKeyCredParams'):
+        assert field in body, f'{field} missing from the options'
+    assert isinstance(body['user'], dict)
+    assert isinstance(body['challenge'], str)
+
+
+@pytest.mark.django_db
+def test_authentication_options_are_also_an_object(client, credential):
+    body = client.post('/api/passkeys/auth/options/').json()
+    assert isinstance(body, dict)
+    assert 'challenge' in body
+    assert isinstance(body.get('allowCredentials'), list)

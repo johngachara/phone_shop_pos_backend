@@ -166,3 +166,16 @@ def test_money_properties_survive_string_assignment():
     sale = Sale(product_name="X", quantity=3, selling_price="100.00", buying_price="60.00")
     assert sale.total_amount == Decimal("300.00")
     assert sale.profit == Decimal("120.00")
+
+
+def test_health_is_exempt_from_the_https_redirect(settings):
+    """The healthcheck is a plain-HTTP request to localhost.
+
+    It never passes through the proxy, so it carries no X-Forwarded-Proto and
+    SECURE_SSL_REDIRECT would answer it with a 301 to https on a port that
+    serves none. The container would then be marked unhealthy and every deploy
+    would fail, with the service actually working the whole time.
+    """
+    import re
+    exempt = getattr(settings, 'SECURE_REDIRECT_EXEMPT', [])
+    assert any(re.match(pattern, 'api/health/') for pattern in exempt)

@@ -138,6 +138,13 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
+    # The health endpoint is exempt, and has to be. It is probed over plain
+    # HTTP on localhost by the container healthcheck and by the deploy job,
+    # neither of which goes through the proxy and so neither of which carries
+    # X-Forwarded-Proto. Without this the probe gets a 301 to https on a port
+    # that serves none, the container is marked unhealthy, and every deploy
+    # fails while the service is in fact fine.
+    SECURE_REDIRECT_EXEMPT = [r'^api/health/$']
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
