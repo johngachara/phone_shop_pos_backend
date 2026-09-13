@@ -27,7 +27,7 @@ from Alltechmanagement.GPTAgent import run_conversation
 from Alltechmanagement.admin_apis import invalidate_dashboard_caches
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
-from Alltechmanagement.models import Customer, Sale, Stock
+from Alltechmanagement.models import Customer, Insight, Sale, Stock
 from django.shortcuts import render
 from Alltechmanagement.serializers import (
     CustomerSerializer,
@@ -673,15 +673,28 @@ def get_daily_ai_insights(request):
             # Delivered to managers' devices rather than through a WhatsApp
             # session driven by a headless browser. A failure here is logged
             # and does not fail the report.
+            insight = Insight.objects.create(
+                kind=Insight.Kind.DAILY,
+                title=f"Sales for {yesterday.strftime('%A %d %B')}",
+                body=response_text,
+                period_start=yesterday.date(),
+                period_end=yesterday.date(),
+            )
+
+            # The notification body is truncated by the operating system
+            # whatever we send, so it carries the report id and the app opens
+            # the whole thing.
             delivered = notify_managers(
-                "Yesterday's sales",
-                # A notification body is truncated by the OS anyway; the full
-                # text is in the app.
+                insight.title,
                 response_text[:240],
-                {"kind": "daily_insight"},
+                {"kind": "daily_insight", "insight_id": str(insight.id)},
             )
             return Response(
-                {"message": response_text, "delivered_to_devices": delivered},
+                {
+                    "message": response_text,
+                    "insight_id": insight.id,
+                    "delivered_to_devices": delivered,
+                },
                 status=status.HTTP_200_OK,
             )
         else:
@@ -732,13 +745,25 @@ Be concise but insightful.
 """
             response_text = run_conversation(user_prompt, days=7)
 
+            insight = Insight.objects.create(
+                kind=Insight.Kind.WEEKLY,
+                title=f"Sales for the week of {current_week.strftime('%d %B')}",
+                body=response_text,
+                period_start=current_week,
+                period_end=today,
+            )
+
             delivered = notify_managers(
-                "This week's sales",
+                insight.title,
                 response_text[:240],
-                {"kind": "weekly_insight"},
+                {"kind": "weekly_insight", "insight_id": str(insight.id)},
             )
             return Response(
-                {"message": response_text, "delivered_to_devices": delivered},
+                {
+                    "message": response_text,
+                    "insight_id": insight.id,
+                    "delivered_to_devices": delivered,
+                },
                 status=status.HTTP_200_OK,
             )
         else:

@@ -101,6 +101,11 @@ sweep DELETE /api/accessories/1/delete/       "204|401|403|404"
 sweep POST   /api/accessories/1/sell/         "200|400|401|403|404"
 
 echo
+echo "Sales reports (manager only)"
+sweep GET /api/insights/                      "200|401|403"
+sweep GET /api/insights/1/                    "200|401|403|404"
+
+echo
 echo "Push notifications"
 sweep POST   /api/push/register/            "400|401|403"
 sweep DELETE /api/push/unregister/          "204|401|403"
