@@ -18,7 +18,13 @@ Two changes from the original, both deliberate:
 The caller is already authenticated by Supabase when these run, so the user is
 taken from request.user and never from the request body -- otherwise anyone
 could enrol a passkey against anyone else's account.
+
+py_webauthn's options_to_json returns a serialised string, not a dict. Passing
+it straight to DRF's Response encodes it a second time and the browser gets a
+JSON string where it expects an object, so every field reads as undefined. The
+options are decoded back before being returned.
 """
+import json
 import logging
 
 from django.core.cache import cache
@@ -126,7 +132,9 @@ def registration_options(request):
         bytes_to_base64url(options.challenge),
         CHALLENGE_TTL_SECONDS,
     )
-    return Response(options_to_json(options), content_type='application/json')
+    # json.loads, because options_to_json returns a string and DRF would
+    # encode it again -- see the note at the top of this module.
+    return Response(json.loads(options_to_json(options)))
 
 
 @api_view(['POST'])
@@ -202,7 +210,9 @@ def authentication_options(request):
         bytes_to_base64url(options.challenge),
         CHALLENGE_TTL_SECONDS,
     )
-    return Response(options_to_json(options), content_type='application/json')
+    # json.loads, because options_to_json returns a string and DRF would
+    # encode it again -- see the note at the top of this module.
+    return Response(json.loads(options_to_json(options)))
 
 
 @api_view(['POST'])
