@@ -6,46 +6,31 @@ from djangoProject15 import settings
 logger = logging.getLogger('django.security')
 
 
-class FirebaseUserRateThrottle(UserRateThrottle):
-    """
-    Custom UserRateThrottle that uses firebase_uid as the unique identifier for rate limiting.
-    Includes additional logging for security monitoring.
-    """
+def principal_ident(request):
+    """Stable per-caller identifier, or None for an unidentifiable caller.
 
-    def get_cache_key(self, request, view):
-        if request.user and request.user.is_authenticated and hasattr(request.user, 'firebase_uid'):
-            ident = request.user.firebase_uid
-            logger.info(f'Rate limiting for Firebase user: {ident}')
-            return self.cache_format % {
-                'scope': self.scope,
-                'ident': ident
-            }
-        logger.warning('Unauthenticated request or missing firebase_uid')
-        return super().get_cache_key(request, view)
-class ClerkUserRateThrottle(UserRateThrottle):
+    `id` is the Supabase user id. `firebase_uid` is still read so the machine
+    token path -- which has no Supabase identity -- keeps a bucket of its own
+    rather than sharing the anonymous one with the public internet.
     """
-    Custom UserRateThrottle that uses clerk.data.id as the unique identifier for rate limiting.
-    Includes additional logging for security monitoring.
-    """
+    user = getattr(request, 'user', None)
+    if not (user and user.is_authenticated):
+        return None
+    return getattr(user, 'id', None) or getattr(user, 'firebase_uid', None)
 
-    def get_cache_key(self, request, view):
-        if request.user and request.user.is_authenticated and hasattr(request.user, 'data'):
-            ident = request.user.data.id
-            logger.info(f'Rate limiting for Clerk user: {ident}')
-            return self.cache_format % {
-                'scope': self.scope,
-                'ident': ident
-            }
-        logger.warning('Unauthenticated request or missing firebase_uid')
-        return super().get_cache_key(request, view)
 
-class BaseFirebaseThrottle(FirebaseUserRateThrottle):
-    """
-    Base throttle class for Firebase authentication with anonymous fallback
+class PrincipalRateThrottle(UserRateThrottle):
+    """Per-principal rate limiting with an anonymous fallback.
+
+    Both of the previous base classes keyed on a provider-specific attribute
+    (`user.firebase_uid`, `user.data.id`). A Supabase principal has neither, so
+    after the identity change every authenticated caller would have dropped into
+    the anonymous bucket -- 2 requests an hour -- and the dashboard throttle
+    would have raised AttributeError outright on `request.user.data`.
     """
 
     def allow_request(self, request, view):
-        if not request.user.is_authenticated or not hasattr(request.user, 'firebase_uid'):
+        if principal_ident(request) is None:
             try:
                 anon_rate = settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['anon']
                 self.rate = anon_rate
@@ -56,54 +41,24 @@ class BaseFirebaseThrottle(FirebaseUserRateThrottle):
         return super().allow_request(request, view)
 
     def get_cache_key(self, request, view):
-        if not request.user.is_authenticated or not hasattr(request.user, 'firebase_uid'):
-            ident = self.get_ident(request)
-            logger.warning('Unauthenticated request or missing firebase_uid')
+        ident = principal_ident(request)
+        if ident is None:
+            logger.warning('Unidentifiable principal; throttling by IP')
             return self.cache_format % {
                 'scope': f"anon_{self.scope}",
-                'ident': ident
+                'ident': self.get_ident(request),
             }
-
-        ident = request.user.firebase_uid
-        logger.info(f'Rate limiting for Firebase user: {ident}')
         return self.cache_format % {
             'scope': self.scope,
-            'ident': ident
+            'ident': ident,
         }
 
 
-
-class BaseClerkThrottle(ClerkUserRateThrottle):
-    """
-    Base throttle class for clerk authentication with anonymous fallback
-    """
-
-    def allow_request(self, request, view):
-        if not request.user.is_authenticated or not hasattr(request.user.data, 'id'):
-            try:
-                anon_rate = settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['anon']
-                self.rate = anon_rate
-                self.num_requests, self.duration = self.parse_rate(self.rate)
-            except (KeyError, TypeError):
-                self.rate = '2/hour'  # Default fallback
-                self.num_requests, self.duration = self.parse_rate(self.rate)
-        return super().allow_request(request, view)
-
-    def get_cache_key(self, request, view):
-        if not request.user.is_authenticated or not hasattr(request.user.data, 'id'):
-            ident = self.get_ident(request)
-            logger.warning('Unauthenticated request or missing clerk_id')
-            return self.cache_format % {
-                'scope': f"anon_{self.scope}",
-                'ident': ident
-            }
-
-        ident = request.user.data.id
-        logger.info(f'Rate limiting for Clerk user: {ident}')
-        return self.cache_format % {
-            'scope': self.scope,
-            'ident': ident
-        }
+# Names kept so the scope classes below read unchanged.
+FirebaseUserRateThrottle = PrincipalRateThrottle
+ClerkUserRateThrottle = PrincipalRateThrottle
+BaseFirebaseThrottle = PrincipalRateThrottle
+BaseClerkThrottle = PrincipalRateThrottle
 
 
 class POSAuthThrottle(AnonRateThrottle):

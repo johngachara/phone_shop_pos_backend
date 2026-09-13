@@ -195,19 +195,3 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f"{self.token[:12]}... ({self.role or 'unassigned'})"
-
-
-class AuthorizedFirebaseToken(models.Model):
-    """Firebase UID allowlist.
-
-    Retained only until Supabase auth replaces the Firebase exchange; it is
-    deleted along with firebase_auth.py in that change, not here.
-    """
-
-    token = models.TextField(unique=True)
-
-    class Meta:
-        db_table = 'authorized_firebase_tokens'
-
-    def __str__(self):
-        return self.token

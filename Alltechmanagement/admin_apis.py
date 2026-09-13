@@ -16,7 +16,7 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.db.utils import DatabaseError
 
-from Alltechmanagement.clerk_auth_class import ClerkAuthentication
+from Alltechmanagement.permissions import IsManager
 from Alltechmanagement.models import Sale
 
 
@@ -57,8 +57,7 @@ def handle_database_errors(func):
 
 
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @handle_database_errors
 @throttle_classes([DashBoardThrottle])
 def main_dashboard(request):
@@ -147,8 +146,7 @@ def main_dashboard(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @throttle_classes([DashBoardThrottle])
 @handle_database_errors
 def weekly_analysis(request):
@@ -208,8 +206,7 @@ def weekly_analysis(request):
 
 @api_view(['GET'])
 @throttle_classes([DashBoardThrottle])
-@authentication_classes([ClerkAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @handle_database_errors
 def monthly_analysis(request):
     """Monthly sales analysis with detailed metrics"""
@@ -288,9 +285,8 @@ def monthly_analysis(request):
 
 
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
 @throttle_classes([DashBoardThrottle])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @handle_database_errors
 def yearly_analysis(request):
     """Yearly sales analysis with comparative metrics"""
@@ -348,9 +344,8 @@ def yearly_analysis(request):
             'error': 'Failed to fetch yearly analysis',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
 @throttle_classes([DashBoardThrottle])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @handle_database_errors
 def customer_insights(request):
     """Comprehensive customer analysis"""
@@ -411,8 +406,7 @@ def customer_insights(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @throttle_classes([DashBoardThrottle])
 @handle_database_errors
 def product_insights(request):
@@ -487,9 +481,8 @@ def product_insights(request):
 
 
 @api_view(['GET'])
-@authentication_classes([ClerkAuthentication])
 @throttle_classes([DashBoardThrottle])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsManager])
 @handle_database_errors
 def sales_patterns(request):
     """Analysis of sales patterns and trends"""
