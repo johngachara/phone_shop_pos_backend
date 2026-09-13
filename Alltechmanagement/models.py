@@ -28,16 +28,13 @@ class Stock(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
     )
-    # Nullable on purpose, for now. Profit needs it, but the existing POS
-    # frontend has no field for it and is not rebuilt until later in the
-    # redesign; a non-null column would break every add-stock call in the
-    # meantime. Profit is reported only where it is known. Tighten to non-null
-    # once the frontend collects it.
+    # Required. It was nullable while the old frontend had no field for it;
+    # the rebuilt one collects it, so there is no longer a reason to accept
+    # stock whose sales can never be counted in profit. An item without a cost
+    # is invisible to every profit figure it contributes to, silently.
     buying_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        null=True,
-        blank=True,
         validators=[MinValueValidator(Decimal('0'))],
     )
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -74,8 +71,6 @@ class Accessory(models.Model):
     buying_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        null=True,
-        blank=True,
         validators=[MinValueValidator(Decimal('0'))],
     )
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -124,6 +119,10 @@ class Sale(models.Model):
     # Captured at the moment of sale rather than joined from Stock at report
     # time. Joining would silently rewrite historical profit every time an item
     # is restocked at a different cost.
+    #
+    # Still nullable, unlike Stock. This is a historical record: a sale made
+    # before costs were required legitimately has none, and rewriting those
+    # rows to satisfy a constraint would be inventing figures.
     buying_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,

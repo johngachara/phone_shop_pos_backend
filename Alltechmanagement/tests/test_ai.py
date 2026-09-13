@@ -40,7 +40,7 @@ def assistant(content=None, tool_calls=None):
 @pytest.mark.django_db
 def test_a_write_tool_does_not_change_anything_during_chat(client):
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
-        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"S21 Screen","quantity":4,"selling_price":4500}')]),
+        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"S21 Screen","quantity":4,"selling_price":4500,"buying_price":2800}')]),
         assistant(content="I've proposed adding that item."),
     ]):
         response = client.post("/api/ai/chat/", {
@@ -67,7 +67,7 @@ def test_a_write_tool_does_not_change_anything_during_chat(client):
 @pytest.mark.django_db(transaction=True)
 def test_confirming_executes_the_change(client):
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
-        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"S21 Screen","quantity":4,"selling_price":4500}')]),
+        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"S21 Screen","quantity":4,"selling_price":4500,"buying_price":2800}')]),
         assistant(content="Proposed."),
     ]):
         action_id = client.post("/api/ai/chat/", {
@@ -88,7 +88,7 @@ def test_confirming_executes_the_change(client):
 @pytest.mark.django_db(transaction=True)
 def test_an_action_cannot_be_confirmed_twice(client):
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
-        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"Once","quantity":1,"selling_price":100}')]),
+        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"Once","quantity":1,"selling_price":100,"buying_price":60}')]),
         assistant(content="Proposed."),
     ]):
         action_id = client.post("/api/ai/chat/", {
@@ -124,7 +124,8 @@ def test_confirming_an_unknown_action_is_refused(client):
 @pytest.mark.django_db
 def test_read_tools_run_without_confirmation(client):
     Stock.objects.create(product_name="A1 Screen", quantity=7,
-                         selling_price=Decimal("1000.00"))
+                         selling_price=Decimal("1000.00"),
+                         buying_price=Decimal("600.00"))
 
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
         assistant(tool_calls=[tool_call("search_stock", '{"query":"A1"}')]),

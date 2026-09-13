@@ -32,7 +32,8 @@ def accessory(db):
 def test_list_is_paginated(client, accessory):
     for i in range(5):
         Accessory.objects.create(product_name=f"Item {i}", quantity=1,
-                                 selling_price=Decimal("100.00"))
+                                 selling_price=Decimal("100.00"),
+                                 buying_price=Decimal("60.00"))
     body = client.get("/api/accessories/?page=1&limit=2").json()
     assert body["totalItems"] == 6
     assert body["totalPages"] == 3
@@ -44,6 +45,7 @@ def test_add_accepts_the_price_alias(client):
     # The current POS sends `price`; the column is `selling_price`.
     response = client.post("/api/accessories/add/", {
         "product_name": "Screen Protector", "quantity": 5, "price": "250.00",
+        "buying_price": "90.00",
     }, format="json")
     assert response.status_code == 201, response.content
     assert Accessory.objects.get(product_name="Screen Protector").selling_price == Decimal("250.00")
@@ -53,6 +55,7 @@ def test_add_accepts_the_price_alias(client):
 def test_duplicate_name_is_rejected_case_insensitively(client, accessory):
     response = client.post("/api/accessories/add/", {
         "product_name": "usb-c cable", "quantity": 1, "price": "500.00",
+        "buying_price": "200.00",
     }, format="json")
     assert response.status_code == 400
 
@@ -144,6 +147,7 @@ def test_the_first_page_is_cached_and_writes_clear_it(client, accessory):
     # four write paths deleted a key nothing had ever set.
     client.post('/api/accessories/add/', {
         'product_name': 'Car Charger', 'quantity': 3, 'price': '800.00',
+        'buying_price': '350.00',
     }, format='json')
 
     assert client.get('/api/accessories/').json()['totalItems'] == 2

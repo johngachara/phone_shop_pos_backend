@@ -143,6 +143,7 @@ def test_deleting_stock_keeps_the_sale_record():
     from Alltechmanagement.models import Sale, Stock
     stock = Stock.objects.create(
         product_name="Screen C", quantity=1, selling_price="50.00",
+        buying_price="30.00",
     )
     sale = Sale.objects.create(
         product_name=stock.product_name, quantity=1,
