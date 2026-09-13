@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 
 from Alltechmanagement.permissions import IsManager
 from Alltechmanagement.supabase_auth import VALID_ROLES
-from Alltechmanagement.throttles import InventoryModificationThrottle
+from Alltechmanagement.throttles import InventoryModificationThrottle, POSAuthThrottle
 
 logger = logging.getLogger('django')
 
@@ -67,6 +67,11 @@ def _alltech_section(user):
     return section if isinstance(section, dict) else {}
 
 
+def _passkey_count(user_id):
+    from Alltechmanagement.models import WebAuthnCredential
+    return WebAuthnCredential.objects.filter(user_id=user_id).count()
+
+
 def _present(user):
     """Shape a Supabase user for the POS.
 
@@ -82,6 +87,9 @@ def _present(user):
         'is_alltech': bool(section.get('is_alltech')),
         'created_at': user.get('created_at'),
         'last_sign_in_at': user.get('last_sign_in_at'),
+        # So a manager can see whether someone has a passkey at all before
+        # deciding whether clearing it will lock them out or let them back in.
+        'passkey_count': _passkey_count(user.get('id')),
     }
 
 
@@ -206,3 +214,66 @@ class UserAdminDetailView(APIView):
 
         logger.info("Manager %s revoked Alltech access for %s", request.user.id, user_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UserPasswordView(APIView):
+    """Set a user's password directly.
+
+    There is no self-service password reset: staff sign in with addresses on
+    the shop's domain and have no mailbox to receive a reset link. A manager
+    sets the password here and tells the person what it is, which is how a
+    shop counter actually works.
+    """
+
+    permission_classes = [IsManager]
+    throttle_classes = [POSAuthThrottle]
+
+    def post(self, request, user_id):
+        password = request.data.get('password') or ''
+        if len(password) < 12:
+            return Response(
+                {'error': 'Password must be at least 12 characters.'}, status=400
+            )
+
+        try:
+            user = _admin_request('GET', f'users/{user_id}')
+            if not _alltech_section(user).get('is_alltech'):
+                # Only this application's users. Other applications share this
+                # Supabase project and their accounts are not ours to change.
+                return Response({'error': 'User not found.'}, status=404)
+
+            _admin_request('PUT', f'users/{user_id}', payload={'password': password})
+        except SupabaseAdminError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        logger.info("Manager %s set the password for %s", request.user.id, user_id)
+        return Response({'updated': True})
+
+
+class UserPasskeysView(APIView):
+    """Clear a user's passkeys.
+
+    The reason this exists: a passkey lives on one device. Lose the phone and
+    you cannot complete the second step, and nothing in the sign-in flow can
+    help you -- the password alone is not enough by design. A manager clears
+    the registrations here and the person enrols again on their new device.
+    """
+
+    permission_classes = [IsManager]
+    throttle_classes = [POSAuthThrottle]
+
+    def delete(self, request, user_id):
+        from Alltechmanagement.models import WebAuthnCredential
+
+        try:
+            user = _admin_request('GET', f'users/{user_id}')
+            if not _alltech_section(user).get('is_alltech'):
+                return Response({'error': 'User not found.'}, status=404)
+        except SupabaseAdminError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        removed, _ = WebAuthnCredential.objects.filter(user_id=user_id).delete()
+        logger.warning(
+            "Manager %s cleared %d passkeys for %s", request.user.id, removed, user_id
+        )
+        return Response({'removed': removed})

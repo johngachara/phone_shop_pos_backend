@@ -23,7 +23,12 @@ from .webauthn_views import (
     verify_authentication,
     verify_registration,
 )
-from .user_admin import UserAdminDetailView, UserAdminListView
+from .user_admin import (
+    UserAdminDetailView,
+    UserAdminListView,
+    UserPasskeysView,
+    UserPasswordView,
+)
 handler404 = 'Alltechmanagement.views.custom_404'
 handler500 = 'Alltechmanagement.views.custom_500'
 
@@ -59,6 +64,8 @@ urlpatterns = [
     path('api/passkeys/auth/verify/', verify_authentication, name='passkey-auth-verify'),
     path('api/users/', UserAdminListView.as_view(), name='user-admin-list'),
     path('api/users/<str:user_id>/', UserAdminDetailView.as_view(), name='user-admin-detail'),
+    path('api/users/<str:user_id>/password/', UserPasswordView.as_view(), name='user-admin-password'),
+    path('api/users/<str:user_id>/passkeys/', UserPasskeysView.as_view(), name='user-admin-passkeys'),
     path('api/customers/',views.get_customers, name='get_customers'),
     path('api/dashboard/', main_dashboard, name='main-dashboard'),
     path('api/weekly/', weekly_analysis, name='weekly-analysis'),
