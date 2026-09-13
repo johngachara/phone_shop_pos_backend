@@ -147,7 +147,22 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # X-Forwarded-Proto. Without this the probe gets a 301 to https on a port that
 # serves none, the container is marked unhealthy, and every deploy fails while
 # the service is in fact fine.
-SECURE_REDIRECT_EXEMPT = [r'^api/health/$']
+SECURE_REDIRECT_EXEMPT = [
+    r'^api/health/$',
+    # The machine endpoints, for the same reason. The scheduler reaches the
+    # app directly over the Docker network on plain HTTP -- deliberately, so
+    # its traffic does not leave the host and come back in through Cloudflare.
+    # Redirecting it to https sends it to port 8000, where no TLS is served,
+    # and the job dies on a read timeout.
+    #
+    # This does not weaken the public path: nginx answers port 80 with a 301
+    # to https before Django is reached at all, so a browser can never arrive
+    # here over plain HTTP in the first place.
+    r'^api/celery-token/$',
+    r'^api/send_sale2$',
+    r'^api/daily-ai/$',
+    r'^api/weekly-ai/$',
+]
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
