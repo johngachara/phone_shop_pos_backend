@@ -290,3 +290,34 @@ class WebAuthnCredential(models.Model):
 
     def __str__(self):
         return f"{self.label or self.credential_id[:12]} ({self.user_id})"
+
+
+class Insight(models.Model):
+    """A generated sales report, kept so it can be read later.
+
+    These used to be produced and discarded: the text went back to whatever
+    triggered the job and nowhere else, so a notification could only ever carry
+    the first couple of hundred characters and the rest was lost. Storing them
+    means a push can link to the whole thing, and yesterday's report is still
+    there when someone opens the app in the afternoon.
+    """
+
+    class Kind(models.TextChoices):
+        DAILY = 'DAILY', 'Daily'
+        WEEKLY = 'WEEKLY', 'Weekly'
+
+    kind = models.CharField(max_length=16, choices=Kind.choices, db_index=True)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    # What the report covered, so a reader can tell at a glance whether it is
+    # the one they were expecting.
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        db_table = 'insights'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.kind} {self.created_at:%Y-%m-%d}"
