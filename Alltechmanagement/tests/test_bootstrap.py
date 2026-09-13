@@ -168,6 +168,22 @@ def test_money_properties_survive_string_assignment():
     assert sale.profit == Decimal("120.00")
 
 
+@pytest.mark.parametrize("path", [
+    'api/health/',
+    # Reached by the scheduler over the Docker network on plain HTTP. A
+    # redirect to https sends it to a port serving none, and the job dies on a
+    # read timeout -- which is exactly how this was found.
+    'api/celery-token/',
+    'api/send_sale2',
+    'api/daily-ai/',
+    'api/weekly-ai/',
+])
+def test_internal_paths_are_exempt_from_the_https_redirect(settings, path):
+    import re
+    exempt = getattr(settings, 'SECURE_REDIRECT_EXEMPT', [])
+    assert any(re.match(pattern, path) for pattern in exempt), f'{path} would be redirected'
+
+
 def test_health_is_exempt_from_the_https_redirect(settings):
     """The healthcheck is a plain-HTTP request to localhost.
 
