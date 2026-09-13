@@ -92,17 +92,25 @@ PERMISSIONS_POLICY = {
 }
 WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
 CORS_ALLOW_CREDENTIALS = True
-CONTENT_SECURITY_POLICY = {'DIRECTIVES': {'connect-src': ("'self'",
-                                'https://models.github.ai/inference',
-                                os.getenv('SUPABASE_URL')),
+# connect-src no longer includes a model provider: the AI runs server-side, so
+# the browser never calls one. It previously did, with a token shipped in the
+# bundle.
+CONTENT_SECURITY_POLICY = {'DIRECTIVES': {'connect-src': tuple(
+                                x for x in (
+                                    "'self'",
+                                    os.getenv('SUPABASE_URL'),
+                                    'https://challenges.cloudflare.com',
+                                ) if x),
                 'default-src': ("'self'",),
                 'font-src': ("'self'",),
                 'form-action': ("'self'",),
                 'frame-ancestors': ("'none'",),
-                'frame-src': ("'none'",),
+                # Cloudflare Turnstile renders in an iframe and loads its own
+                # script; without these the challenge silently fails to appear.
+                'frame-src': ('https://challenges.cloudflare.com',),
                 'img-src': ("'self'",),
                 'object-src': ("'none'",),
-                'script-src': ("'self'",),
+                'script-src': ("'self'", 'https://challenges.cloudflare.com'),
                 'style-src': ("'self'", "'unsafe-inline'")}}
 ROOT_URLCONF = 'djangoProject15.urls'
 CORS_ALLOWED_ORIGINS = [
