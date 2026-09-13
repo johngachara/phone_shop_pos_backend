@@ -165,3 +165,69 @@ def test_employee_can_run_the_till_end_to_end(stock):
     assert api.post(f"/api/complete2/{sale.pk}").status_code == 200
     # ...but analytics stay closed.
     assert api.get("/api/dashboard/").status_code == 403
+
+
+# --- selling directly, without holding -----------------------------------
+
+@pytest.mark.django_db(transaction=True)
+def test_a_direct_sale_is_money_immediately(client, stock):
+    """Paid at the counter, so it never passes through Orders.
+
+    The held-order flow exists because an item is often handed over before it
+    is paid for. When it is paid there and then, routing it through a
+    completion step nobody will perform would leave revenue permanently
+    pending.
+    """
+    response = client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name,
+        "price": "5000.00",
+        "quantity": 2,
+        "customer_name": "Mwangi",
+        "complete": True,
+    }, format="json")
+    assert response.status_code == 200, response.content
+    assert response.json()["status"] == Sale.Status.COMPLETED
+
+    sale = Sale.objects.get(pk=response.json()["transaction_id"])
+    assert sale.status == Sale.Status.COMPLETED
+    assert sale.completed_at is not None
+    # Not yet reported: the daily email still has to pick it up.
+    assert sale.reported_at is None
+
+    stock.refresh_from_db()
+    assert stock.quantity == 8
+
+    # The customer's total moves now, not at some later completion.
+    assert Customer.objects.get(name="mwangi").total_spent == Decimal("10000.00")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_holding_is_still_the_default(client, stock):
+    response = client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name, "price": "5000.00",
+        "quantity": 1, "customer_name": "Mwangi",
+    }, format="json")
+    assert response.json()["status"] == Sale.Status.PENDING
+    # Nothing is owed to the customer record until the order is completed.
+    assert not Customer.objects.filter(name="mwangi").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_direct_sale_does_not_appear_in_unpaid_orders(client, stock):
+    client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name, "price": "5000.00",
+        "quantity": 1, "customer_name": "Mwangi", "complete": True,
+    }, format="json")
+    assert Sale.objects.filter(status=Sale.Status.PENDING).count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_direct_sale_cannot_oversell(client, stock):
+    response = client.post(f"/api/sell2/{stock.pk}", {
+        "product_name": stock.product_name, "price": "5000.00",
+        "quantity": 999, "customer_name": "Mwangi", "complete": True,
+    }, format="json")
+    assert response.status_code == 400
+    stock.refresh_from_db()
+    assert stock.quantity == 10
+    assert Sale.objects.count() == 0

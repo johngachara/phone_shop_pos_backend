@@ -90,6 +90,21 @@ def log_db_queries(f):
     return new_f
 
 
+def record_customer_spend(customer_name, amount):
+    """Add an amount to a customer's running total.
+
+    F() rather than read-modify-write: two tills completing sales for the same
+    customer at the same moment would otherwise lose one of the amounts.
+    """
+    customer, created = Customer.objects.get_or_create(
+        name=customer_name, defaults={'total_spent': amount},
+    )
+    if not created:
+        Customer.objects.filter(pk=customer.pk).update(
+            total_spent=F('total_spent') + amount
+        )
+    return customer
+
 @api_view(['GET'])
 @permission_classes([IsEmployeeOrManager])
 @throttle_classes([InventoryCheckThrottle])
@@ -144,6 +159,13 @@ async def sell_api(request, product_id):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
+    # Two ways to sell. Holding is the default because it is what the counter
+    # does most: an item is handed over and paid for afterwards. A direct sale
+    # is for when the customer pays there and then, and skipping the hold step
+    # saves a trip to the Orders screen for something already settled.
+    complete_now = bool(request.data.get('complete'))
+    customer_name = serializer.validated_data['customer_name'].strip().lower()
+
     try:
         # Define database operations that need to be run synchronously
         @sync_to_async
@@ -176,10 +198,19 @@ async def sell_api(request, product_id):
                     # rewrite historical profit on every restock.
                     buying_price=buying_price_at_sale,
                     quantity=quantity,
-                    customer_name=serializer.validated_data['customer_name'],
+                    customer_name=customer_name,
                     stock=product,
-                    status=Sale.Status.PENDING,
+                    status=(
+                        Sale.Status.COMPLETED if complete_now else Sale.Status.PENDING
+                    ),
+                    completed_at=timezone.now() if complete_now else None,
                 )
+
+                # A direct sale is money the moment it is made, so the
+                # customer's total and the dashboard have to move now rather
+                # than waiting for a completion step that will never come.
+                if complete_now:
+                    record_customer_spend(customer_name, saved_transaction.total_amount)
 
                 # Refresh product to get actual quantity
                 product.refresh_from_db()
@@ -199,8 +230,12 @@ async def sell_api(request, product_id):
         # Prepare response data
         response_data = {
             'data': serializer.data,
-            'transaction_id': saved_transaction.id
+            'transaction_id': saved_transaction.id,
+            'status': saved_transaction.status,
         }
+
+        if complete_now:
+            invalidate_dashboard_caches()
 
         # Handle non-critical async operations
         async def async_operations():
@@ -248,18 +283,7 @@ def complete_transaction2_api(request, transaction_id):
             return Response({'error': 'Pending transaction not found'}, status=404)
 
         customer_name = sale.customer_name.lower()
-        amount = sale.total_amount
-
-        customer, created = Customer.objects.get_or_create(
-            name=customer_name,
-            defaults={'total_spent': amount},
-        )
-        if not created:
-            # F() rather than read-modify-write: two tills completing sales for
-            # the same customer at once would otherwise lose one of the amounts.
-            Customer.objects.filter(pk=customer.pk).update(
-                total_spent=F('total_spent') + amount
-            )
+        record_customer_spend(customer_name, sale.total_amount)
 
         # One row, one status change. Previously this wrote copies into
         # COMPLETED_TRANSACTIONS2_FIX and RECEIPTS2_FIX and deleted the
