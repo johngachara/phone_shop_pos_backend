@@ -5,11 +5,25 @@ token shipped in the bundle (VITE_GITHUB_TOKEN), readable by every POS user.
 All model calls happen server-side now.
 
 Model choice was made by testing tool-calling against this account rather than
-from documentation: of the candidates, nemotron-3-super-120b-a12b and
-nemotron-3.5-lightning-30b-a3b both return well-formed tool calls, while
-mistral-large-2-instruct and nemotron-nano-3-30b-a3b return 404 -- they are not
-deployed for this key. The default chain therefore contains only models proven
-to work here.
+from documentation, re-verified 2026-09-14 after most of the original
+candidates (mistral-large-2-instruct, nemotron-nano-3-30b-a3b, every
+meta/llama-3.1-3.3 chat model) started returning 404/410 -- either never
+deployed for this key or retired from the catalog outright.
+
+nemotron-3.5-lightning-30b-a3b, briefly tried as the primary model for speed,
+made things worse rather than better: it is a *reasoning* model that spends
+real generation time on a hidden chain-of-thought before it answers or emits a
+tool call, and `ai_chat` can chain up to MAX_TOOL_ROUNDS (6) of those before
+the user sees a reply. At 45s per attempt with a two-model fallback chain,
+that is comfortably enough to blow past gunicorn's 60s worker timeout on any
+turn needing more than one round -- confirmed live: `WORKER TIMEOUT` killed
+the request outright, not just answered slowly.
+
+openai/gpt-oss-20b replaces it: not a reasoning model, ~3.5s per call in
+testing against this account, and produces clean structured tool_calls with
+no chain-of-thought leaking into the answer shown to the user.
+nemotron-3-super-120b-a12b stays as the fallback -- still the better reasoner
+over sales data, for when gpt-oss-20b is slow or unavailable.
 """
 import logging
 import os
@@ -20,19 +34,18 @@ logger = logging.getLogger('django')
 
 NIM_BASE_URL = os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
 
-# Lightning first. It is the smaller model of the two proven ones, and a till
-# operator waiting on a chat reply notices the difference between a 30B and a
-# 120B model far more than the report's few extra words of nuance. The larger
-# model is kept as the fallback for when lightning is slow or unavailable,
-# rather than dropped, since it is still the better reasoner over sales data.
 DEFAULT_MODELS = (
-    'nvidia/nemotron-3.5-lightning-30b-a3b',
+    'openai/gpt-oss-20b',
     'nvidia/nemotron-3-super-120b-a12b',
 )
 
 # A till operator will not wait indefinitely, and a stalled model should fail
-# over rather than hold the request open.
-ATTEMPT_TIMEOUT_SECONDS = float(os.getenv('AI_ATTEMPT_TIMEOUT', '45'))
+# over rather than hold the request open. Lowered from 45s: gpt-oss-20b
+# answers in single-digit seconds in practice, and a large per-attempt budget
+# is exactly what let one slow model attempt, let alone a fallback to a
+# second, run past gunicorn's own 60s worker timeout and get killed rather
+# than fail over cleanly.
+ATTEMPT_TIMEOUT_SECONDS = float(os.getenv('AI_ATTEMPT_TIMEOUT', '20'))
 
 
 class AIUnavailable(RuntimeError):
