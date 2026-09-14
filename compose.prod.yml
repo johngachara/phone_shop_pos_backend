@@ -5,6 +5,13 @@
 #   - Postgres is not run locally; the database is Supabase
 #   - log rotation is configured, because the default json-file driver grows
 #     without limit and fills the disk on a long-lived server
+#   - the app container ships its logs to Grafana Cloud Loki directly via
+#     Docker's own logging driver, so nobody has to SSH in and grep a
+#     container to see what happened. Chosen over running a collector
+#     (Promtail/Alloy) as its own long-lived process: this is a small VPS,
+#     and the driver adds no extra process at all -- the daemon ships logs
+#     itself. redis stays on json-file; its own log line volume is noise,
+#     not signal, and not worth shipping.
 #
 # TLS and the public reverse proxy are configured on the server and are
 # deliberately not in this repo.
@@ -55,7 +62,18 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
-    logging: *logging
+    # keep-file retains the usual local json-file logs alongside shipping to
+    # Loki, so `docker logs` still works even if the network to Grafana
+    # Cloud is down -- the driver only ships in addition to that, it does
+    # not replace local logging.
+    logging:
+      driver: loki
+      options:
+        loki-url: "${LOKI_URL}"
+        loki-external-labels: "job=alltech-backend,container={{.Name}}"
+        keep-file: "true"
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   redis_data:
