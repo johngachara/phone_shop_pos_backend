@@ -20,12 +20,14 @@ logger = logging.getLogger('django')
 
 NIM_BASE_URL = os.getenv('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
 
-# Primary first. The larger model reasons better over sales data; the lightning
-# model is the fallback when the primary is slow or unavailable, and is fast
-# enough that a till is not left waiting.
+# Lightning first. It is the smaller model of the two proven ones, and a till
+# operator waiting on a chat reply notices the difference between a 30B and a
+# 120B model far more than the report's few extra words of nuance. The larger
+# model is kept as the fallback for when lightning is slow or unavailable,
+# rather than dropped, since it is still the better reasoner over sales data.
 DEFAULT_MODELS = (
-    'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-3.5-lightning-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
 )
 
 # A till operator will not wait indefinitely, and a stalled model should fail
