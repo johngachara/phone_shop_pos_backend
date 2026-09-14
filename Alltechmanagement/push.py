@@ -10,6 +10,7 @@ expressible; PushDevice carries the Supabase user id and role that makes it so.
 """
 import logging
 
+from firebase_admin.messaging import UnregisteredError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
@@ -89,11 +90,20 @@ def notify_managers(title, body, data=None):
 
             # Drop tokens Firebase rejected as unregistered, or the list grows
             # forever with devices that will never receive anything again.
+            #
+            # This used to match on 'not-registered' (hyphenated) appearing in
+            # str(exception), which never matched anything: the SDK raises
+            # UnregisteredError('NotRegistered') -- no hyphen, and str() of it
+            # is just the message, not the class name either way. So every
+            # dead token Firebase ever rejected stayed in the table forever,
+            # rejected again on every future send. Checking the exception
+            # type directly, rather than guessing at its string form, is what
+            # the SDK actually documents for telling this case apart.
             responses = getattr(response, 'responses', []) or []
             dead = [
                 batch[i] for i, item in enumerate(responses)
                 if not getattr(item, 'success', True)
-                and 'not-registered' in str(getattr(item, 'exception', '')).lower()
+                and isinstance(getattr(item, 'exception', None), UnregisteredError)
             ]
             if dead:
                 PushDevice.objects.filter(token__in=dead).delete()
