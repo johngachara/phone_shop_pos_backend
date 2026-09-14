@@ -93,15 +93,23 @@ def _credentials_from_file():
 
 
 def send_push(title, msg, registration_token, dataObject):
+    """Send a data-only FCM message -- deliberately no `notification` block.
+
+    A message that carries a `notification` payload gets auto-displayed by
+    the browser's own push handling whenever the tab is backgrounded or
+    closed, using FCM's default click behaviour (open the site root) rather
+    than routing through this app's service worker at all. That is why
+    tapping a notification opened the app but never the specific insight it
+    was about: the custom onBackgroundMessage/notificationclick handlers in
+    firebase-messaging-sw.js never ran. A pure data message always reaches
+    them, so the notification -- and what tapping it does -- is entirely
+    this app's to construct.
+    """
     if not _ensure_app():
         logger.warning("send_push called with Firebase unavailable; dropping notification %r", title)
         return None
     message = messaging.MulticastMessage(
-        notification=messaging.Notification(
-            title=title,
-            body=msg,
-        ),
-        data=dataObject,
+        data={'title': title, 'body': msg, **dataObject},
         tokens=registration_token
     )
     return messaging.send_each_for_multicast(message)
