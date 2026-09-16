@@ -30,6 +30,7 @@ from Alltechmanagement.customPagination import CustomPagination, StandardResults
 from Alltechmanagement.models import Accessory, Customer, Insight, Sale, Stock
 from django.shortcuts import render
 from Alltechmanagement.serializers import (
+    AccessorySerializer,
     CustomerSerializer,
     SaleSerializer,
     SellSerializer,
@@ -163,7 +164,10 @@ def get_shop2_stock_api(request, id):
     cache_key = f'SHOP_STOCK_{id}'
     cached_data = cache.get(cache_key)
     if cached_data is None:
-        data = Stock.objects.get(pk=id)
+        try:
+            data = Stock.objects.get(pk=id)
+        except Stock.DoesNotExist:
+            return Response({'error': 'Item not found'}, status=404)
         serializer = StockSerializer(instance=data)
         cached_data = serializer.data
         cache.set(cache_key, cached_data, timeout=60 * 120)
@@ -684,15 +688,28 @@ def send_push_notification(request):
 def detailed_low_stock(request):
     threshold = int(request.GET.get('threshold', 3))  # Default threshold is 3
 
-    # Query items with quantity less than or equal to the threshold
-    queryset = Stock.objects.filter(quantity__lte=threshold).order_by('quantity')
+    # Merged across both inventories. A low accessory is just as much a
+    # restock problem as a low screen; reporting only Stock here made this
+    # endpoint (and the dashboard/low-stock page built on it) understate what
+    # actually needs reordering.
+    stock_items = StockSerializer(
+        Stock.objects.filter(quantity__lte=threshold), many=True
+    ).data
+    accessory_items = AccessorySerializer(
+        Accessory.objects.filter(quantity__lte=threshold), many=True
+    ).data
+
+    combined = []
+    for item in stock_items:
+        combined.append({**item, 'item_type': 'SCREEN'})
+    for item in accessory_items:
+        combined.append({**item, 'item_type': 'ACCESSORY'})
+    combined.sort(key=lambda i: i['quantity'])
 
     paginator = StandardResultsSetPagination()
-    paginated_queryset = paginator.paginate_queryset(queryset, request)
+    paginated = paginator.paginate_queryset(combined, request)
 
-    serializer = StockSerializer(paginated_queryset, many=True)
-
-    return paginator.get_paginated_response(serializer.data)
+    return paginator.get_paginated_response(paginated)
 
 
 

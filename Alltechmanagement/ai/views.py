@@ -43,6 +43,11 @@ Rules:
 - Use the tools rather than guessing. If you do not have a figure, fetch it.
 - When a change is needed, call the matching tool. It will not take effect
   immediately; the user is shown exactly what you proposed and must confirm.
+- When the user asks to add, update, or delete more than one stock item, use
+  the matching _batch tool (add_stock_batch, update_stock_batch,
+  delete_stock_batch) with all the items in one call, instead of calling the
+  single-item tool repeatedly. A batch call is one action type applied to
+  several items -- never mix, e.g., an add and a delete in the same request.
 - Never claim a change has been made. Say what you have proposed.
 - If sales_summary returns profit_covers_sales lower than sales_count, say that
   profit only covers part of the sales rather than presenting it as complete.
@@ -112,24 +117,28 @@ def ai_chat(request):
                         result = {'error': 'That lookup failed.'}
 
                 elif name in ai_tools.WRITE_EXECUTORS:
-                    # Proposed only. Nothing is written on this path.
-                    action_id = uuid.uuid4().hex
-                    description = ai_tools.describe_action(name, args)
-                    cache.set(
-                        _pending_key(request.user.id, action_id),
-                        {'tool': name, 'args': args, 'description': description},
-                        PENDING_TTL_SECONDS,
-                    )
-                    pending.append({
-                        'action_id': action_id,
-                        'tool': name,
-                        'arguments': args,
-                        'description': description,
-                    })
-                    result = {
-                        'status': 'awaiting_confirmation',
-                        'message': 'Proposed. The user must confirm before this happens.',
-                    }
+                    batch_error = ai_tools.validate_batch(name, args)
+                    if batch_error:
+                        result = {'error': batch_error}
+                    else:
+                        # Proposed only. Nothing is written on this path.
+                        action_id = uuid.uuid4().hex
+                        description = ai_tools.describe_action(name, args)
+                        cache.set(
+                            _pending_key(request.user.id, action_id),
+                            {'tool': name, 'args': args, 'description': description},
+                            PENDING_TTL_SECONDS,
+                        )
+                        pending.append({
+                            'action_id': action_id,
+                            'tool': name,
+                            'arguments': args,
+                            'description': description,
+                        })
+                        result = {
+                            'status': 'awaiting_confirmation',
+                            'message': 'Proposed. The user must confirm before this happens.',
+                        }
 
                 else:
                     result = {'error': f'Unknown tool {name}.'}
