@@ -106,3 +106,15 @@ def test_listing_reports_how_many_passkeys_each_user_has():
     # So a manager can tell whether clearing will lock someone out or let them
     # back in, before doing it.
     assert body['users'][0]['passkey_count'] == 1
+
+
+@pytest.mark.django_db
+def test_supabase_admin_error_returns_generic_502():
+    from Alltechmanagement.user_admin import SupabaseAdminError
+    with patch('Alltechmanagement.user_admin._admin_request',
+               side_effect=SupabaseAdminError('secret stack trace details')):
+        response = client_as(ROLE_MANAGER).get('/api/users/')
+    assert response.status_code == 502
+    assert response.json() == {'error': 'Authentication service error.'}
+    assert 'secret' not in response.json()['error']
+

@@ -351,3 +351,50 @@ def test_sales_report_says_what_is_missing_rather_than_failing_generically(monke
 
     assert response.status_code == 503
     assert 'RESEND_API_KEY' in response.data['error']
+
+
+@pytest.mark.django_db
+def test_send_sales_email_failure_returns_generic_502(monkeypatch):
+    from Alltechmanagement.models import Sale
+    from django.utils import timezone
+
+    Sale.objects.create(
+        product_name='x', quantity=1, selling_price=Decimal('100.00'),
+        customer_name='x', status=Sale.Status.COMPLETED, completed_at=timezone.now(),
+    )
+    monkeypatch.setenv('RESEND_API_KEY', 're_123')
+    monkeypatch.setenv('RESEND_SENDER_EMAIL', 'pos@alltech.co.ke')
+    monkeypatch.setenv('GMAIL_RECEIVER', 'mgr@alltech.co.ke')
+
+    from Alltechmanagement import views
+    from rest_framework.test import APIRequestFactory, force_authenticate
+
+    class Machine:
+        is_authenticated = True
+        id = None
+        firebase_uid = 'celery'
+
+    with patch('resend.Emails.send', side_effect=Exception('API key revoked secret info')):
+        request = APIRequestFactory().get('/api/send_sale2')
+        force_authenticate(request, user=Machine())
+        response = views.send_sales2_api(request)
+
+    assert response.status_code == 502
+    assert response.data == {'error': 'Could not send the sales report.'}
+    assert 'secret' not in response.data['error']
+
+
+@pytest.mark.django_db
+def test_batch_item_failure_returns_generic_error():
+    from Alltechmanagement.ai import tools as ai_tools
+    from Alltechmanagement.supabase_auth import ROLE_MANAGER, SupabaseUser
+
+    def failing_executor(user, item):
+        raise RuntimeError("Internal DB connection leak details")
+
+    user = SupabaseUser(user_id='u', email='u@test.com', role=ROLE_MANAGER, is_alltech=True)
+    resp = ai_tools._run_batch(failing_executor, user, [{'product_name': 'Item 1'}])
+    assert resp.status_code == 400
+    assert resp.data['results'][0]['error'] == 'Item processing failed'
+    assert 'leak' not in resp.data['results'][0]['error']
+

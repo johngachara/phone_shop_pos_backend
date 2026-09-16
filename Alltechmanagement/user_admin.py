@@ -33,6 +33,7 @@ def _admin_request(method, path, payload=None, params=None):
     base_url = getattr(settings, 'SUPABASE_URL', None)
     service_key = getattr(settings, 'SUPABASE_KEY', None)
     if not base_url or not service_key:
+        logger.error("Supabase admin credentials are not configured")
         raise SupabaseAdminError('Supabase admin credentials are not configured')
 
     try:
@@ -100,8 +101,11 @@ class UserAdminListView(APIView):
     def get(self, request):
         try:
             payload = _admin_request('GET', 'users', params={'per_page': 200})
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         users = payload.get('users', payload if isinstance(payload, list) else [])
         # Other applications share this Supabase project, and their users are
@@ -134,8 +138,11 @@ class UserAdminListView(APIView):
                 'email_confirm': True,
                 'app_metadata': {'alltech': {'is_alltech': True, 'role': role}},
             })
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         logger.info("Manager %s created Alltech user %s with role %s",
                     request.user.id, email, role)
@@ -182,8 +189,11 @@ class UserAdminDetailView(APIView):
 
             updated = _admin_request('PUT', f'users/{user_id}',
                                      payload={'app_metadata': app_metadata})
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         logger.info("Manager %s set role of %s to %s", request.user.id, user_id, role)
         return Response(_present(updated))
@@ -209,8 +219,11 @@ class UserAdminDetailView(APIView):
             app_metadata['alltech'] = {'is_alltech': False, 'role': None}
             _admin_request('PUT', f'users/{user_id}',
                            payload={'app_metadata': app_metadata})
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         logger.info("Manager %s revoked Alltech access for %s", request.user.id, user_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -243,8 +256,11 @@ class UserPasswordView(APIView):
                 return Response({'error': 'User not found.'}, status=404)
 
             _admin_request('PUT', f'users/{user_id}', payload={'password': password})
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         logger.info("Manager %s set the password for %s", request.user.id, user_id)
         return Response({'updated': True})
@@ -269,8 +285,11 @@ class UserPasskeysView(APIView):
             user = _admin_request('GET', f'users/{user_id}')
             if not _alltech_section(user).get('is_alltech'):
                 return Response({'error': 'User not found.'}, status=404)
-        except SupabaseAdminError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except SupabaseAdminError:
+            return Response(
+                {'error': 'Authentication service error.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         removed, _ = WebAuthnCredential.objects.filter(user_id=user_id).delete()
         logger.warning(
