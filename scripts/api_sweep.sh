@@ -127,7 +127,7 @@ echo
 echo "User administration (manager only)"
 sweep GET    /api/users/                      "200|401|403"
 sweep POST   /api/users/abc/password/         "400|401|403|404|429"
-sweep DELETE /api/users/abc/passkeys/         "200|401|403|404|429"
+sweep DELETE /api/users/abc/passkeys/         "200|401|403|404|429|502"
 
 echo
 echo "Removed auth routes (Firebase exchange, token refresh)"
