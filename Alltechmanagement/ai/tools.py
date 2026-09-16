@@ -197,7 +197,7 @@ def _run_batch(single_executor, user, items):
             })
         except Exception as exc:
             logger.error("AI batch item failed: %s", exc)
-            results.append({'ok': False, 'error': str(exc), 'args': item})
+            results.append({'ok': False, 'error': 'Item processing failed', 'args': item})
 
     succeeded = sum(1 for r in results if r['ok'])
     return Response(

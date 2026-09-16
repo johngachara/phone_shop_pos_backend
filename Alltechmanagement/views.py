@@ -618,13 +618,11 @@ def send_sales2_api(request):
 
         return Response("Email with PDF sent successfully!")
     except Exception as e:
-        # The message is logged in full and summarised to the caller. A bare
-        # "an internal error occurred" left a scheduled job with nothing to act
-        # on -- the actual cause here was a rejected Resend key, which is a
-        # five-second fix once you can see it.
+        # The message is logged in full on the server and a generic error
+        # returned to the caller to avoid exposing internal exception details.
         logging.error("Error in send_completed_transactions_email: %s", e, exc_info=True)
         return Response(
-            {'error': f'Could not send the sales report: {e}'},
+            {'error': 'Could not send the sales report.'},
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
