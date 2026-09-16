@@ -83,6 +83,27 @@ def test_sell_reduces_stock_and_records_a_completed_sale(client, accessory):
 
 
 @pytest.mark.django_db
+def test_sell_price_can_differ_from_the_catalog_price(client, accessory):
+    """Selling price is set at sale time, the same capability screens have.
+
+    A counter sale isn't always at the listed price -- a discount, a bundle,
+    a round-number cash sale -- so the sell endpoint must accept whatever
+    price the till sends rather than silently substituting the catalog price.
+    """
+    response = client.post(f"/api/accessories/{accessory.pk}/sell/", {
+        "product_name": accessory.product_name, "price": "450.00",
+        "quantity": 1, "customer_name": "Jane", "complete": True,
+    }, format="json")
+    assert response.status_code == 200, response.content
+
+    sale = Sale.objects.get(pk=response.json()["sale_id"])
+    assert sale.selling_price == Decimal("450.00")
+    # The catalog price is untouched by a one-off sale price.
+    accessory.refresh_from_db()
+    assert accessory.selling_price == Decimal("500.00")
+
+
+@pytest.mark.django_db
 def test_sell_refuses_to_oversell(client, accessory):
     response = client.post(f"/api/accessories/{accessory.pk}/sell/", {
         "product_name": accessory.product_name, "price": "500.00",

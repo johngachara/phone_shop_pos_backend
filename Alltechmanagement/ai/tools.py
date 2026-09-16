@@ -153,10 +153,79 @@ def _execute_delete_stock(user, args):
     )
 
 
+# A batch call is one action type applied to several items, not several
+# different actions bundled together -- e.g. adding 5 new stock items in one
+# call, not one add and one delete in the same call. Capped well below what a
+# human would want to review in a single confirmation dialog.
+MAX_BATCH_ITEMS = 20
+
+BATCH_TOOLS = {'add_stock_batch', 'update_stock_batch', 'delete_stock_batch'}
+
+
+def validate_batch(name, args):
+    """Return an error string, or None when the batch args are usable."""
+    if name not in BATCH_TOOLS:
+        return None
+    items = args.get('items')
+    if not isinstance(items, list) or not items:
+        return 'items must be a non-empty list.'
+    if len(items) > MAX_BATCH_ITEMS:
+        return f'Too many items: {len(items)} exceeds the maximum of {MAX_BATCH_ITEMS} per request.'
+    return None
+
+
+def _run_batch(single_executor, user, items):
+    """Run one single-item executor over each item, independently.
+
+    Each item goes through the same endpoint (and so the same permission and
+    throttle checks) as a single action would. One item's failure does not
+    stop or roll back the others -- each was already its own atomic write at
+    the endpoint level, so the batch is a sequence of independent operations,
+    not one transaction.
+    """
+    from rest_framework.response import Response
+
+    results = []
+    for item in items:
+        try:
+            resp = single_executor(user, item)
+            results.append({
+                'ok': resp.status_code < 400,
+                'status_code': resp.status_code,
+                'data': getattr(resp, 'data', None),
+                'args': item,
+            })
+        except Exception as exc:
+            logger.error("AI batch item failed: %s", exc)
+            results.append({'ok': False, 'error': str(exc), 'args': item})
+
+    succeeded = sum(1 for r in results if r['ok'])
+    return Response(
+        {'results': results, 'succeeded': succeeded, 'failed': len(results) - succeeded},
+        status=200 if succeeded else 400,
+    )
+
+
+def _execute_add_stock_batch(user, args):
+    return _run_batch(_execute_add_stock, user, args.get('items') or [])
+
+
+def _execute_update_stock_batch(user, args):
+    return _run_batch(_execute_update_stock, user, args.get('items') or [])
+
+
+def _execute_delete_stock_batch(user, args):
+    items = [item if isinstance(item, dict) else {'id': item} for item in (args.get('items') or [])]
+    return _run_batch(_execute_delete_stock, user, items)
+
+
 WRITE_EXECUTORS = {
     'add_stock': _execute_add_stock,
     'update_stock': _execute_update_stock,
     'delete_stock': _execute_delete_stock,
+    'add_stock_batch': _execute_add_stock_batch,
+    'update_stock_batch': _execute_update_stock_batch,
+    'delete_stock_batch': _execute_delete_stock_batch,
 }
 
 READ_TOOLS = {
@@ -185,6 +254,23 @@ def describe_action(name, args):
         return f"Update stock item #{args.get('id')} — set {changes}"
     if name == 'delete_stock':
         return f"Delete stock item #{args.get('id')} permanently"
+    if name == 'add_stock_batch':
+        items = args.get('items') or []
+        names = ', '.join(f'"{i.get("product_name")}" (qty {i.get("quantity")})' for i in items[:5])
+        more = f" and {len(items) - 5} more" if len(items) > 5 else ""
+        return f"Add {len(items)} new stock items: {names}{more}"
+    if name == 'update_stock_batch':
+        items = args.get('items') or []
+        ids = ', '.join(f"#{i.get('id')}" for i in items[:10])
+        more = f" and {len(items) - 10} more" if len(items) > 10 else ""
+        return f"Update {len(items)} stock items: {ids}{more}"
+    if name == 'delete_stock_batch':
+        items = args.get('items') or []
+        ids = ', '.join(
+            f"#{i.get('id') if isinstance(i, dict) else i}" for i in items[:10]
+        )
+        more = f" and {len(items) - 10} more" if len(items) > 10 else ""
+        return f"Delete {len(items)} stock items permanently: {ids}{more}"
     return f"{name} with {args}"
 
 
@@ -291,6 +377,92 @@ TOOL_SCHEMAS = [
                 'type': 'object',
                 'properties': {'id': {'type': 'integer'}},
                 'required': ['id'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'add_stock_batch',
+            'description': (
+                f'Propose adding several new stock items at once (up to {MAX_BATCH_ITEMS}). '
+                'Use this instead of calling add_stock multiple times when the user asks to add '
+                'more than one item. Requires the user to confirm before it happens.'
+            ),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'items': {
+                        'type': 'array',
+                        'maxItems': MAX_BATCH_ITEMS,
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'product_name': {'type': 'string'},
+                                'quantity': {'type': 'integer'},
+                                'selling_price': {'type': 'number'},
+                                'buying_price': {'type': 'number'},
+                            },
+                            'required': ['product_name', 'quantity', 'selling_price'],
+                        },
+                    },
+                },
+                'required': ['items'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'update_stock_batch',
+            'description': (
+                f'Propose changing several existing stock items at once (up to {MAX_BATCH_ITEMS}). '
+                'Use this instead of calling update_stock multiple times when the user asks to update '
+                'more than one item. Requires the user to confirm before it happens.'
+            ),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'items': {
+                        'type': 'array',
+                        'maxItems': MAX_BATCH_ITEMS,
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'id': {'type': 'integer'},
+                                'product_name': {'type': 'string'},
+                                'quantity': {'type': 'integer'},
+                                'selling_price': {'type': 'number'},
+                                'buying_price': {'type': 'number'},
+                            },
+                            'required': ['id'],
+                        },
+                    },
+                },
+                'required': ['items'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'delete_stock_batch',
+            'description': (
+                f'Propose deleting several stock items at once (up to {MAX_BATCH_ITEMS}). '
+                'Use this instead of calling delete_stock multiple times when the user asks to delete '
+                'more than one item. Requires the user to confirm before it happens.'
+            ),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'items': {
+                        'type': 'array',
+                        'maxItems': MAX_BATCH_ITEMS,
+                        'items': {'type': 'integer'},
+                        'description': 'Stock item ids to delete.',
+                    },
+                },
+                'required': ['items'],
             },
         },
     },

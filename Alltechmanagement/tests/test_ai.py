@@ -147,7 +147,84 @@ def test_the_assistant_has_no_tool_for_selling_or_refunding():
     # changes a user account is deliberately absent.
     for forbidden in ("sell", "refund", "complete", "create_user", "delete_user"):
         assert not any(forbidden in n for n in names), f"{forbidden} is reachable"
-    assert set(ai_tools.WRITE_EXECUTORS) == {"add_stock", "update_stock", "delete_stock"}
+    assert set(ai_tools.WRITE_EXECUTORS) == {
+        "add_stock", "update_stock", "delete_stock",
+        "add_stock_batch", "update_stock_batch", "delete_stock_batch",
+    }
+
+
+@pytest.mark.django_db
+def test_a_batch_proposal_does_not_change_anything_during_chat(client):
+    items = '{"items":[' + ','.join(
+        f'{{"product_name":"Item {i}","quantity":1,"selling_price":100,"buying_price":60}}'
+        for i in range(3)
+    ) + ']}'
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("add_stock_batch", items)]),
+        assistant(content="Proposed 3 items."),
+    ]):
+        response = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "add 3 items"}]
+        }, format="json")
+
+    assert response.status_code == 200
+    body = response.json()
+    action = body["pending_actions"][0]
+    assert action["tool"] == "add_stock_batch"
+    assert "3" in action["description"]
+    assert Stock.objects.count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_confirming_a_batch_executes_every_item(client):
+    items = '{"items":[' + ','.join(
+        f'{{"product_name":"Batch Item {i}","quantity":2,"selling_price":100,"buying_price":60}}'
+        for i in range(3)
+    ) + ']}'
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("add_stock_batch", items)]),
+        assistant(content="Proposed."),
+    ]):
+        action_id = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "add 3 items"}]
+        }, format="json").json()["pending_actions"][0]["action_id"]
+
+    response = client.post("/api/ai/confirm/", {"action_id": action_id}, format="json")
+    assert response.status_code == 200, response.content
+    assert response.json()["result"]["succeeded"] == 3
+    assert Stock.objects.filter(product_name__startswith="Batch Item").count() == 3
+
+
+@pytest.mark.django_db
+def test_a_batch_over_the_max_is_refused_before_it_becomes_a_proposal(client):
+    from Alltechmanagement.ai import tools as ai_tools
+    too_many = ','.join(
+        f'{{"product_name":"X{i}","quantity":1,"selling_price":100}}'
+        for i in range(ai_tools.MAX_BATCH_ITEMS + 1)
+    )
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("add_stock_batch", '{"items":[' + too_many + ']}')]),
+        assistant(content="Too many."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "add a lot of items"}]
+        }, format="json").json()
+
+    assert body["pending_actions"] == []
+    assert Stock.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_a_batch_mixing_action_types_is_not_possible():
+    """Batch tools only ever apply one action type to many items.
+
+    There is no tool that accepts a mixed list of adds and deletes -- each
+    batch tool executes exactly one kind of write.
+    """
+    from Alltechmanagement.ai import tools as ai_tools
+    for name in ("add_stock_batch", "update_stock_batch", "delete_stock_batch"):
+        schema = next(t for t in ai_tools.TOOL_SCHEMAS if t["function"]["name"] == name)
+        assert "items" in schema["function"]["parameters"]["properties"]
 
 
 @pytest.mark.django_db

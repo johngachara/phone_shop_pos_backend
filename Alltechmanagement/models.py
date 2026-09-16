@@ -201,12 +201,17 @@ class Sale(models.Model):
 
     @property
     def profit(self):
-        """Profit, or None when the buying price was never recorded.
+        """Profit, or None when there is no usable cost to subtract.
 
         None rather than zero: an unknown cost is not the same as a free item,
-        and reporting it as zero would overstate profit.
+        and reporting it as zero would overstate profit. A recorded cost of
+        exactly zero is the same problem in disguise -- it means the item's
+        cost was never actually captured, so the "profit" would just be the
+        full selling price (100% margin), which silently inflates every
+        profit figure. Those sales still count as revenue; they are simply
+        excluded from profit until a real buying price is recorded.
         """
-        if self.buying_price is None:
+        if self.buying_price is None or self._money(self.buying_price) == 0:
             return None
         return (self._money(self.selling_price) - self._money(self.buying_price)) * self.quantity
 

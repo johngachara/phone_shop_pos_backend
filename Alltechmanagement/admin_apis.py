@@ -55,13 +55,17 @@ def handle_database_errors(func):
 
     return wrapper
 
-# Profit is only computable for sales that recorded a cost. buying_price is
-# nullable while the POS has no field for it, and SQL SUM simply skips NULL
+# Profit is only computable for sales that recorded a real cost. buying_price
+# is nullable while the POS has no field for it, and SQL SUM simply skips NULL
 # rows -- so a bare profit total silently understates itself with no hint that
-# it did. Every profit figure is therefore reported with the number of sales it
-# was actually derived from, so a caller can see the coverage rather than trust
-# a number computed from a fraction of the data.
-HAS_COST = Q(buying_price__isnull=False)
+# it did. A recorded cost of exactly zero is excluded too: it means the cost
+# was never actually captured (an item cannot really be free), so counting it
+# would report the full selling price as profit -- a 100% margin that isn't
+# real. Those sales still count as revenue, just not as profit. Every profit
+# figure is therefore reported with the number of sales it was actually
+# derived from, so a caller can see the coverage rather than trust a number
+# computed from a fraction of the data.
+HAS_COST = Q(buying_price__isnull=False) & ~Q(buying_price=0)
 
 
 def profit_sum():

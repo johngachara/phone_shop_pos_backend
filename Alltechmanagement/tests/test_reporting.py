@@ -58,6 +58,32 @@ def test_profit_is_zero_not_an_error_when_no_cost_is_known(manager):
 
 
 @pytest.mark.django_db
+def test_zero_buying_price_counts_as_revenue_not_profit(manager):
+    """A recorded cost of 0 is a missing cost in disguise, not a free item.
+
+    Counting it would report the full selling price as a 100% margin, which
+    silently inflates every profit figure. It should still be revenue.
+    """
+    make_sale(selling_price=Decimal("1000.00"), buying_price=Decimal("600.00"))
+    make_sale(selling_price=Decimal("500.00"), buying_price=Decimal("0.00"))
+
+    body = manager.get("/api/dashboard/").json()
+    totals = body["today_metrics"]
+
+    assert totals["total_sales"] == Decimal("1500.00")
+    assert Decimal(totals["total_profit"]) == Decimal("400.00")
+    assert totals["sales_with_cost"] == 1
+    assert totals["sales_count"] == 2
+
+
+@pytest.mark.django_db
+def test_sale_profit_property_excludes_zero_buying_price():
+    sale = make_sale(selling_price=Decimal("500.00"), buying_price=Decimal("0.00"))
+    assert sale.profit is None
+    assert sale.total_amount == Decimal("500.00")
+
+
+@pytest.mark.django_db
 def test_accessory_sales_are_reported_and_split_out(manager):
     make_sale(item_type=Sale.ItemType.SCREEN,
               selling_price=Decimal("5000.00"), buying_price=Decimal("3000.00"))
