@@ -398,3 +398,43 @@ def test_batch_item_failure_returns_generic_error():
     assert resp.data['results'][0]['error'] == 'Item processing failed'
     assert 'leak' not in resp.data['results'][0]['error']
 
+
+@pytest.mark.django_db
+def test_daily_insight_finds_yesterdays_sale_at_the_nairobi_day_boundary(monkeypatch):
+    """The scheduler runs at 07:00 Nairobi time, which is 04:00 UTC -- still
+    the same UTC calendar date as "today" in Nairobi. A container clock reads
+    UTC, so `datetime.now()` (a naive, unconverted read of that clock) used to
+    silently stand in for "now in Nairobi" here, while every other date in the
+    codebase goes through `django.utils.timezone`. Most days the two agree by
+    coincidence; this fixes the run at a moment where they would not, without
+    needing a real timezone bug in production to notice: a sale placed early
+    in the Nairobi morning of "yesterday" (00:30 EAT, i.e. 2026-09-16 21:30
+    UTC) must still be found once the job runs the next Nairobi morning.
+    """
+    from datetime import datetime, timezone as dt_timezone
+    from django.utils import timezone
+    from Alltechmanagement import views
+
+    fixed_now = datetime(2026, 9, 18, 4, 0, 0, tzinfo=dt_timezone.utc)
+    monkeypatch.setattr(views.timezone, 'now', lambda: fixed_now)
+
+    Sale.objects.create(
+        product_name='Screen', quantity=1, selling_price=Decimal('5000.00'),
+        customer_name='x', status=Sale.Status.COMPLETED,
+        created_at=datetime(2026, 9, 16, 21, 30, 0, tzinfo=dt_timezone.utc),
+    )
+
+    class Machine:
+        is_authenticated = True
+        id = None
+        firebase_uid = 'celery'
+
+    from rest_framework.test import APIRequestFactory, force_authenticate
+
+    with patch('Alltechmanagement.views.run_conversation', return_value='report text'):
+        request = APIRequestFactory().get('/api/daily-ai/')
+        force_authenticate(request, user=Machine())
+        response = views.get_daily_ai_insights(request)
+
+    assert response.status_code == 200
+
