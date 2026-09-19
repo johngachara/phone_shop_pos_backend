@@ -735,7 +735,7 @@ def get_customers(request):
 def get_daily_ai_insights(request):
     try:
 
-        yesterday = datetime.now() - timedelta(days=1)
+        yesterday = timezone.localtime(timezone.now()) - timedelta(days=1)
         data = Sale.objects.filter(
             status=Sale.Status.COMPLETED, created_at__date=yesterday
         )

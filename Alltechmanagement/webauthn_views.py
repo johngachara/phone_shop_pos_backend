@@ -48,6 +48,7 @@ from webauthn.helpers.exceptions import (
 )
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
+    AuthenticatorTransport,
     PublicKeyCredentialDescriptor,
     ResidentKeyRequirement,
     UserVerificationRequirement,
@@ -65,6 +66,35 @@ RP_NAME = 'Alltech'
 # Five minutes: long enough for a user to reach for a fingerprint reader,
 # short enough that an intercepted challenge is quickly useless.
 CHALLENGE_TTL_SECONDS = 300
+
+# Matches the hard client-side timeout in passkeys.ts. Sent to the browser as
+# a hint (the WebAuthn spec lets a user agent ignore it), which is why the
+# frontend also aborts on its own -- this just gets the platform UI to give up
+# on the same schedule instead of outliving the page's own timeout.
+CEREMONY_TIMEOUT_MS = 60_000
+
+# Without an explicit hint here, a credential descriptor carries no transports
+# and the browser cannot tell it apart from one it would need to fetch over
+# hybrid (QR-code phone-as-authenticator) transport. Chrome on Android reacts
+# to that ambiguity by offering the hybrid flow instead of going straight to
+# the platform authenticator, which is a plausible mismatch with what the user
+# expects (an on-device fingerprint/PIN prompt) and, in some Android WebView /
+# installed-PWA contexts, a flow that never resolves at all -- indistinguishable
+# from the reported hang. Every credential enrolled here is the device's own
+# platform authenticator, so it is safe to always hint "internal".
+_INTERNAL_TRANSPORT = [AuthenticatorTransport.INTERNAL]
+
+
+_KNOWN_TRANSPORTS = {t.value for t in AuthenticatorTransport}
+
+
+def _descriptor(credential_id_b64url, transports=None):
+    known = [t for t in (transports or []) if t in _KNOWN_TRANSPORTS]
+    mapped = [AuthenticatorTransport(t) for t in known] or _INTERNAL_TRANSPORT
+    return PublicKeyCredentialDescriptor(
+        id=base64url_to_bytes(credential_id_b64url),
+        transports=mapped,
+    )
 
 # Everything a browser can send that means "this assertion is not acceptable".
 # The structural errors matter as much as the cryptographic ones: the payload is
@@ -118,13 +148,13 @@ def registration_options(request):
         # Stops the same authenticator being enrolled twice, which would leave
         # the user with two credentials and no way to tell them apart.
         exclude_credentials=[
-            PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-            for c in existing
+            _descriptor(c.credential_id, c.transports) for c in existing
         ],
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.PREFERRED,
             user_verification=UserVerificationRequirement.PREFERRED,
         ),
+        timeout=CEREMONY_TIMEOUT_MS,
     )
 
     cache.set(
@@ -168,12 +198,15 @@ def verify_registration(request):
         cache.delete(key)
 
     credential_id = bytes_to_base64url(verification.credential_id)
+    response_data = request.data.get('response') if isinstance(request.data, dict) else None
+    transports = response_data.get('transports') if isinstance(response_data, dict) else None
     WebAuthnCredential.objects.update_or_create(
         credential_id=credential_id,
         defaults={
             'user_id': user.id,
             'public_key': bytes_to_base64url(verification.credential_public_key),
             'sign_count': verification.sign_count,
+            'transports': transports if isinstance(transports, list) else [],
             'device_type': getattr(verification.credential_device_type, 'value', ''),
             'backed_up': bool(verification.credential_backed_up),
             'label': request.data.get('label', '') if isinstance(request.data, dict) else '',
@@ -199,10 +232,10 @@ def authentication_options(request):
     options = generate_authentication_options(
         rp_id=_rp_id(),
         allow_credentials=[
-            PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-            for c in credentials
+            _descriptor(c.credential_id, c.transports) for c in credentials
         ],
         user_verification=UserVerificationRequirement.PREFERRED,
+        timeout=CEREMONY_TIMEOUT_MS,
     )
 
     cache.set(

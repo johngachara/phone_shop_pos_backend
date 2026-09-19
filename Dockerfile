@@ -35,6 +35,6 @@ ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["gunicorn", "djangoProject15.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "3", \
-     "--timeout", "60", \
+     "--timeout", "120", \
      "--access-logfile", "-", \
      "--error-logfile", "-"]
