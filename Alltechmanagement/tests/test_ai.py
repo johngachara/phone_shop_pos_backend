@@ -11,18 +11,25 @@ import pytest
 from rest_framework.test import APIClient
 
 from Alltechmanagement.models import Sale, Stock
-from Alltechmanagement.supabase_auth import ROLE_EMPLOYEE, SupabaseUser
+from Alltechmanagement.supabase_auth import ROLE_EMPLOYEE, ROLE_MANAGER, SupabaseUser
 
 
-def principal(user_id="ai-user"):
+def principal(user_id="ai-user", role=ROLE_EMPLOYEE):
     return SupabaseUser(user_id=user_id, email="a@alltechnyeri.co.ke",
-                        role=ROLE_EMPLOYEE, is_alltech=True)
+                        role=role, is_alltech=True)
 
 
 @pytest.fixture
 def client():
     api = APIClient()
     api.force_authenticate(user=principal())
+    return api
+
+
+@pytest.fixture
+def manager_client():
+    api = APIClient()
+    api.force_authenticate(user=principal("manager-user", role=ROLE_MANAGER))
     return api
 
 
@@ -102,12 +109,14 @@ def test_an_action_cannot_be_confirmed_twice(client):
 
 
 @pytest.mark.django_db
-def test_one_user_cannot_confirm_another_users_proposal(client):
+def test_one_user_cannot_confirm_another_users_proposal(manager_client):
+    # Manager, not Employee: deleting is manager-only (see the role-restriction
+    # tests below), and this test is about proposal ownership, not that rule.
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
         assistant(tool_calls=[tool_call("delete_stock", '{"id":1}')]),
         assistant(content="Proposed."),
     ]):
-        action_id = client.post("/api/ai/chat/", {
+        action_id = manager_client.post("/api/ai/chat/", {
             "messages": [{"role": "user", "content": "delete it"}]
         }, format="json").json()["pending_actions"][0]["action_id"]
 
@@ -437,4 +446,159 @@ def test_daily_insight_finds_yesterdays_sale_at_the_nairobi_day_boundary(monkeyp
         response = views.get_daily_ai_insights(request)
 
     assert response.status_code == 200
+
+
+# --- role restriction on AI-proposed writes -----------------------------------
+#
+# The manual POS UI hides the quantity field and the delete button from an
+# Employee, but that is a client-side restriction only -- the assistant reaches
+# the same endpoints without going through that UI at all, so it needs its own
+# enforcement rather than inheriting the frontend's.
+
+@pytest.mark.django_db
+def test_employee_cannot_propose_deleting_stock_via_ai(client):
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("delete_stock", '{"id":1}')]),
+        assistant(content="I can't do that."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "delete stock item 1"}]
+        }, format="json").json()
+
+    assert body["pending_actions"] == []
+
+
+@pytest.mark.django_db
+def test_employee_cannot_propose_a_quantity_change_via_ai(client):
+    Stock.objects.create(product_name="A1 Screen", quantity=7,
+                         selling_price=Decimal("1000.00"), buying_price=Decimal("600.00"))
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("update_stock", '{"id":1,"quantity":50}')]),
+        assistant(content="I can't do that."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "set stock 1 to 50 units"}]
+        }, format="json").json()
+
+    assert body["pending_actions"] == []
+
+
+@pytest.mark.django_db
+def test_employee_can_still_propose_a_price_change_via_ai(client):
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("update_stock", '{"id":1,"selling_price":1200}')]),
+        assistant(content="Proposed."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "change the price"}]
+        }, format="json").json()
+
+    assert len(body["pending_actions"]) == 1
+    assert body["pending_actions"][0]["tool"] == "update_stock"
+
+
+@pytest.mark.django_db
+def test_employee_can_still_propose_adding_a_new_item_via_ai(client):
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("add_stock", '{"product_name":"New Screen","quantity":10,"selling_price":1000}')]),
+        assistant(content="Proposed."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "add a new item"}]
+        }, format="json").json()
+
+    # Adding a new item -- including its starting quantity -- is not a
+    # quantity *change* to an existing one, so it stays open to an Employee.
+    assert len(body["pending_actions"]) == 1
+
+
+@pytest.mark.django_db
+def test_employee_cannot_propose_a_batch_delete_via_ai(client):
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("delete_stock_batch", '{"items":[1,2,3]}')]),
+        assistant(content="I can't do that."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "delete these three"}]
+        }, format="json").json()
+
+    assert body["pending_actions"] == []
+
+
+@pytest.mark.django_db
+def test_employee_cannot_propose_a_batch_quantity_change_via_ai(client):
+    items = '{"items":[{"id":1,"quantity":5},{"id":2,"selling_price":900}]}'
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("update_stock_batch", items)]),
+        assistant(content="I can't do that."),
+    ]):
+        body = client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "update these two"}]
+        }, format="json").json()
+
+    # One item in the batch touches quantity, so the whole batch is refused
+    # rather than silently dropping that one item's quantity change.
+    assert body["pending_actions"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_manager_can_still_delete_and_change_quantity_via_ai(manager_client):
+    # transaction=True tests run earlier in the suite leak committed rows (see
+    # the file-level comment on test_confirming_executes_the_change), so this
+    # cannot assume its row gets id=1 -- it must use whatever id it actually got.
+    item = Stock.objects.create(product_name="Old Screen", quantity=7,
+                                selling_price=Decimal("1000.00"), buying_price=Decimal("600.00"))
+    with patch("Alltechmanagement.ai.views.chat", side_effect=[
+        assistant(tool_calls=[tool_call("update_stock", f'{{"id":{item.id},"quantity":99}}')]),
+        assistant(content="Proposed."),
+    ]):
+        action_id = manager_client.post("/api/ai/chat/", {
+            "messages": [{"role": "user", "content": "set stock to 99"}]
+        }, format="json").json()["pending_actions"][0]["action_id"]
+
+    response = manager_client.post("/api/ai/confirm/", {"action_id": action_id}, format="json")
+    assert response.status_code == 200, response.content
+    assert Stock.objects.get(id=item.id).quantity == 99
+
+
+@pytest.mark.django_db
+def test_top_customers_ranks_by_revenue_in_the_window():
+    from django.utils import timezone
+    from Alltechmanagement.ai import tools as ai_tools
+
+    Sale.objects.create(product_name="A", quantity=2, selling_price=Decimal("10000.00"),
+                        customer_name="john kamau", status=Sale.Status.COMPLETED,
+                        completed_at=timezone.now())
+    Sale.objects.create(product_name="B", quantity=1, selling_price=Decimal("5000.00"),
+                        customer_name="mary wanjiru", status=Sale.Status.COMPLETED,
+                        completed_at=timezone.now())
+    # No customer given -- must not show up as a "top customer".
+    Sale.objects.create(product_name="C", quantity=1, selling_price=Decimal("50000.00"),
+                        customer_name="null", status=Sale.Status.COMPLETED,
+                        completed_at=timezone.now())
+
+    result = ai_tools.top_customers(days=7, limit=5)
+    assert [r["customer_name"] for r in result] == ["john kamau", "mary wanjiru"]
+    assert result[0]["total_spent"] == "20000.00"
+    assert result[0]["purchase_count"] == 1
+
+
+@pytest.mark.django_db
+def test_daily_report_facts_include_top_customers():
+    from django.utils import timezone
+    from Alltechmanagement import GPTAgent
+
+    Sale.objects.create(product_name="A", quantity=1, selling_price=Decimal("1000.00"),
+                        customer_name="john kamau", status=Sale.Status.COMPLETED,
+                        completed_at=timezone.now())
+
+    with patch("Alltechmanagement.GPTAgent.chat") as mocked_chat:
+        mocked_chat.return_value = SimpleNamespace(content="report")
+        GPTAgent.run_conversation("Write a daily report.", days=1)
+
+    facts = mocked_chat.call_args[0][0][-1]["content"]
+    assert "john kamau" in facts
+    # The report path is unparametrized, so it must default to the report chain
+    # rather than accidentally reusing the interactive chat's model chain.
+    assert mocked_chat.call_args.kwargs.get("mode", "report") == "report"
 
