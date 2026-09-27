@@ -578,6 +578,7 @@ def send_sales2_api(request):
             'transactions': transactions,
             'total': total,
             'heading': 'Shop 2 Sales',
+            'year': timezone.now().year,
         })
 
         # Generate PDF from HTML

@@ -88,7 +88,7 @@ def test_fcm_env_credentials_need_the_required_fields(monkeypatch):
 
 def test_ai_provider_raises_when_no_key_is_configured(monkeypatch):
     from Alltechmanagement.ai import provider
-    monkeypatch.setattr(provider, "_client", None)
+    monkeypatch.setattr(provider, "_clients", {})
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
     with pytest.raises(provider.AIUnavailable):
         provider.get_client()

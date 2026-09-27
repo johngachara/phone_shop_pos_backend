@@ -81,7 +81,7 @@ def ai_chat(request):
 
     try:
         for _ in range(MAX_TOOL_ROUNDS):
-            message = chat(messages, tools=ai_tools.TOOL_SCHEMAS)
+            message = chat(messages, tools=ai_tools.TOOL_SCHEMAS, mode='chat')
             tool_calls = getattr(message, 'tool_calls', None)
 
             if not tool_calls:
@@ -117,9 +117,10 @@ def ai_chat(request):
                         result = {'error': 'That lookup failed.'}
 
                 elif name in ai_tools.WRITE_EXECUTORS:
-                    batch_error = ai_tools.validate_batch(name, args)
-                    if batch_error:
-                        result = {'error': batch_error}
+                    role_error = ai_tools.check_role_restriction(request.user, name, args)
+                    batch_error = None if role_error else ai_tools.validate_batch(name, args)
+                    if role_error or batch_error:
+                        result = {'error': role_error or batch_error}
                     else:
                         # Proposed only. Nothing is written on this path.
                         action_id = uuid.uuid4().hex

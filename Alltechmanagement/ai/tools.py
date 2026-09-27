@@ -17,6 +17,8 @@ import logging
 
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from Alltechmanagement.supabase_auth import ROLE_MANAGER
+
 logger = logging.getLogger('django')
 
 _factory = APIRequestFactory()
@@ -106,6 +108,46 @@ def sales_summary(user, days=7):
     }
 
 
+def top_customers(days=7, limit=5):
+    """Top customers by revenue over the window, for the scheduled reports.
+
+    Sale.customer_name is denormalized text, not a Customer FK, so this groups
+    directly on Sale -- the same base admin_apis.customer_insights uses --
+    scoped to the report's own date window rather than Customer.total_spent,
+    which is an all-time running total and would answer the wrong question for
+    a "yesterday" or "this week" report.
+    """
+    from datetime import timedelta
+
+    from django.db.models import Count, F, Sum
+    from django.utils import timezone
+
+    from Alltechmanagement.admin_apis import completed_sales
+
+    days = min(int(days or 7), 365)
+    limit = min(int(limit or 5), 20)
+    since = timezone.now() - timedelta(days=days)
+    rows = (
+        completed_sales()
+        .filter(created_at__gte=since)
+        .exclude(customer_name='null')
+        .values('customer_name')
+        .annotate(
+            total_spent=Sum(F('selling_price') * F('quantity')),
+            purchase_count=Count('id'),
+        )
+        .order_by('-total_spent')[:limit]
+    )
+    return [
+        {
+            'customer_name': r['customer_name'],
+            'total_spent': str(r['total_spent']),
+            'purchase_count': r['purchase_count'],
+        }
+        for r in rows
+    ]
+
+
 def search_accessories(user, query=None, limit=20):
     from Alltechmanagement.models import Accessory
     queryset = Accessory.objects.all()
@@ -160,6 +202,34 @@ def _execute_delete_stock(user, args):
 MAX_BATCH_ITEMS = 20
 
 BATCH_TOOLS = {'add_stock_batch', 'update_stock_batch', 'delete_stock_batch'}
+
+
+def check_role_restriction(user, name, args):
+    """Return an error string, or None when the caller's role allows this write.
+
+    Employees run the till and can add new stock or correct a name/price, but
+    changing how much of something exists, or removing it outright, is a
+    manager decision -- the same split the manual POS UI enforces by hiding
+    those controls for an Employee. That UI restriction is client-side only;
+    this is the one path that has to be enforced here, because the assistant
+    reaches the same endpoints without ever going through that UI.
+    """
+    if getattr(user, 'role', None) == ROLE_MANAGER:
+        return None
+
+    if name == 'delete_stock':
+        return 'Deleting a stock item requires the manager role.'
+    if name == 'delete_stock_batch':
+        return 'Deleting stock items requires the manager role.'
+    if name == 'update_stock' and args.get('quantity') is not None:
+        return ('Changing stock quantity requires the manager role. '
+                'You can still update the name or price.')
+    if name == 'update_stock_batch':
+        items = args.get('items') or []
+        if any(isinstance(item, dict) and item.get('quantity') is not None for item in items):
+            return ('Changing stock quantity requires the manager role. '
+                    'You can still update names or prices.')
+    return None
 
 
 def validate_batch(name, args):

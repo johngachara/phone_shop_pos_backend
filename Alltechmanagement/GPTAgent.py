@@ -36,6 +36,7 @@ def run_conversation(user_prompt, days=1):
     try:
         summary = ai_tools.sales_summary(user=None, days=days)
         stock = ai_tools.low_stock(user=None, threshold=3)
+        customers = ai_tools.top_customers(days=days, limit=5)
     except Exception as exc:
         logger.error("Could not gather report data: %s", exc)
         raise
@@ -47,7 +48,9 @@ def run_conversation(user_prompt, days=1):
         f"- profit: {summary['profit']} "
         f"(covering {summary['profit_covers_sales']} of {summary['sales_count']} sales)\n"
         f"- best sellers: {summary['top_products']}\n\n"
-        f"Items at or below 3 in stock: {stock['items']}\n"
+        f"Items at or below 3 in stock: {stock['items']}\n\n"
+        f"Top {len(customers)} customers by revenue over the last {days} day(s), "
+        f"most involved first: {customers}\n"
     )
 
     messages = [
