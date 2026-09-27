@@ -13,12 +13,16 @@
 name: Bandit
 on:
   push:
-    branches: [ "main" ]
+    # alltechv2 is the active branch (and the repo's default) -- "main" hasn't
+    # had a commit land on it in the redesign, so this never actually ran on
+    # real work, only via the weekly cron below.
+    branches: [ "alltechv2" ]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: [ "alltechv2" ]
   schedule:
     - cron: '28 13 * * 4'
+  workflow_dispatch:
 
 jobs:
   bandit:

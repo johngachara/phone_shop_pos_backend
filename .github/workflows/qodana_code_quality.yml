@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: # Specify your branches here
-      - main # The 'main' branch
+    branches:
+      - alltechv2 # the active/default branch -- "main" never gets real commits
       - 'releases/*' # The release branches
 
 jobs:
