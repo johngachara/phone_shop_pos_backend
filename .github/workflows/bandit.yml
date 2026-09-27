@@ -44,7 +44,11 @@ jobs:
           # Report only issues of a given confidence level or higher. Can be LOW, MEDIUM or HIGH. Default is UNDEFINED (everything)
           # confidence: # optional, default is UNDEFINED
           # comma-separated list of paths (glob patterns supported) to exclude from scan (note that these are in addition to the excluded paths provided in the config file) (default: .svn,CVS,.bzr,.hg,.git,__pycache__,.tox,.eggs,*.egg)
-          # excluded_paths: # optional, default is DEFAULT
+          # Bandit's job is policing production code; a test suite asserting on
+          # fixture data (fake device tokens, throwaway JWT secrets, plain
+          # `assert`) is not that boundary, and scanning it produced 268 of the
+          # 269 open alerts, none a real finding.
+          excluded_paths: Alltechmanagement/tests
           # comma-separated list of test IDs to skip
           # skips: # optional, default is DEFAULT
           # path to a .bandit file that supplies command line arguments

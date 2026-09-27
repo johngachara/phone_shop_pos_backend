@@ -321,9 +321,9 @@ def describe_action(name, args):
         changes = ', '.join(
             f"{k} to {v}" for k, v in args.items() if k != 'id' and v is not None
         )
-        return f"Update stock item #{args.get('id')} — set {changes}"
+        return f"Update stock item #{args.get('id')} — set {changes}"  # nosec B608 -- confirmation-dialog text, not a query
     if name == 'delete_stock':
-        return f"Delete stock item #{args.get('id')} permanently"
+        return f"Delete stock item #{args.get('id')} permanently"  # nosec B608 -- confirmation-dialog text, not a query
     if name == 'add_stock_batch':
         items = args.get('items') or []
         names = ', '.join(f'"{i.get("product_name")}" (qty {i.get("quantity")})' for i in items[:5])
