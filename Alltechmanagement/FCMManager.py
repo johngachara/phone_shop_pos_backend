@@ -50,7 +50,7 @@ _ENV_TO_FIELD = {
     "FIREBASE_CLIENT_EMAIL": "client_email",
     "FIREBASE_CLIENT_ID": "client_id",
     "FIREBASE_AUTH_URI": "auth_uri",
-    "FIREBASE_TOKEN_URI": "token_uri",
+    "FIREBASE_TOKEN_URI": "token_uri",  # nosec B105 -- a service-account JSON field name, not a password
     "FIREBASE_AUTH_PROVIDER_X509_CERT_URL": "auth_provider_x509_cert_url",
     "FIREBASE_CLIENT_X509_CERT_URL": "client_x509_cert_url",
     "FIREBASE_UNIVERSE_DOMAIN": "universe_domain",
