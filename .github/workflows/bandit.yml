@@ -48,13 +48,17 @@ jobs:
           # Report only issues of a given confidence level or higher. Can be LOW, MEDIUM or HIGH. Default is UNDEFINED (everything)
           # confidence: # optional, default is UNDEFINED
           # comma-separated list of paths (glob patterns supported) to exclude from scan (note that these are in addition to the excluded paths provided in the config file) (default: .svn,CVS,.bzr,.hg,.git,__pycache__,.tox,.eggs,*.egg)
-          # Bandit's job is policing production code; a test suite asserting on
-          # fixture data (fake device tokens, throwaway JWT secrets, plain
-          # `assert`) is not that boundary, and scanning it produced 268 of the
-          # 269 open alerts, none a real finding.
-          excluded_paths: Alltechmanagement/tests
+          # excluded_paths: # optional, default is DEFAULT -- see ini_path below; this input is broken in this action version (pinned by SHA):
+          # its entrypoint script only ever assigns `-x $INPUT_EXCLUDED_PATHS`
+          # inside the branch that checks INPUT_EXCLUDED_PATHS == "DEFAULT",
+          # so a real value here is silently dropped and never reaches bandit.
           # comma-separated list of test IDs to skip
           # skips: # optional, default is DEFAULT
           # path to a .bandit file that supplies command line arguments
-          # ini_path: # optional, default is DEFAULT
+          # Bandit's job is policing production code; a test suite asserting on
+          # fixture data (fake device tokens, throwaway JWT secrets, plain
+          # `assert`) is not that boundary. `--ini` is wired through correctly
+          # in this action (unlike excluded_paths above), so the exclusion
+          # lives in .bandit at the repo root instead.
+          ini_path: .bandit
 
