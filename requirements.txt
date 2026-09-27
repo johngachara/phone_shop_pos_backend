@@ -23,7 +23,7 @@ django-redis>=6.0.0
 whitenoise>=6.12.0
 
 # --- Data stores ---
-psycopg2-binary>=2.9.11
+psycopg2-binary>=2.9.13
 redis>=8.1.0
 
 # --- Identity ---
