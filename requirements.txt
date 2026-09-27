@@ -10,7 +10,7 @@
 Django>=6.0.3
 djangorestframework>=3.17.0
 djangorestframework_simplejwt>=5.5.1
-asgiref>=3.11.1
+asgiref>=3.12.1
 gunicorn>=26.2.0
 
 # --- Django plugins loaded by name from settings.py ---
