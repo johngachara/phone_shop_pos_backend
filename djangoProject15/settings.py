@@ -321,7 +321,7 @@ REST_FRAMEWORK = {
         'sales_ops': '120/minute',
         'order_mgmt': '60/minute',
         'inventory_check': '300/minute',
-        'celery_auth_token': '5/day',
+        'celery_auth_token': '5/day',  # nosec B105 -- a DRF throttle rate, not a password
         'weekly_email': '5/day',
         'dashboard': '20/second',
     },

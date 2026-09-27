@@ -1,2 +1,7 @@
 [bandit]
-exclude = Alltechmanagement/tests
+# Must be "./Alltechmanagement/tests", not "Alltechmanagement/tests" -- the
+# workflow scans with `-r .`, so bandit discovers every path with a leading
+# "./", and exclude only matches that exact prefix rather than doing a
+# looser substring match. Confirmed both ways live: the unprefixed form
+# left all 288 test-file findings in place across two separate CI runs.
+exclude = ./Alltechmanagement/tests
