@@ -7,7 +7,7 @@
 # in this repo, or to something Django loads by name from settings.py.
 
 # --- Framework ---
-Django>=6.0.3
+Django>=6.1.1
 djangorestframework>=3.17.0
 djangorestframework_simplejwt>=5.5.1
 asgiref>=3.11.1
