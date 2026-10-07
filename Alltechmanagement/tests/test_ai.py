@@ -484,17 +484,18 @@ def test_employee_cannot_propose_a_quantity_change_via_ai(client):
 
 
 @pytest.mark.django_db
-def test_employee_can_still_propose_a_price_change_via_ai(client):
+def test_employee_cannot_propose_a_price_change_via_ai(client):
+    # Employees add and sell. Correcting an existing item -- even only its
+    # price -- is a manager decision now, and the endpoint itself refuses it.
     with patch("Alltechmanagement.ai.views.chat", side_effect=[
         assistant(tool_calls=[tool_call("update_stock", '{"id":1,"selling_price":1200}')]),
-        assistant(content="Proposed."),
+        assistant(content="I can't do that."),
     ]):
         body = client.post("/api/ai/chat/", {
             "messages": [{"role": "user", "content": "change the price"}]
         }, format="json").json()
 
-    assert len(body["pending_actions"]) == 1
-    assert body["pending_actions"][0]["tool"] == "update_stock"
+    assert body["pending_actions"] == []
 
 
 @pytest.mark.django_db

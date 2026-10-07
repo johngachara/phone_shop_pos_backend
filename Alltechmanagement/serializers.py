@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from Alltechmanagement.models import Accessory, Customer, Sale, Stock
@@ -8,6 +10,28 @@ class SellSerializer(serializers.Serializer):
     price = serializers.DecimalField(max_digits=10, decimal_places=2)
     quantity = serializers.IntegerField(min_value=1)
     customer_name = serializers.CharField()
+    # Screens only. The accessory endpoint refuses anything but CUSTOMER.
+    sale_type = serializers.ChoiceField(
+        choices=Sale.SaleType.choices, default=Sale.SaleType.CUSTOMER, required=False
+    )
+    repair_charge = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal('0'),
+        required=False, default=Decimal('0'),
+    )
+
+    def validate(self, attrs):
+        if attrs.get('sale_type') == Sale.SaleType.REPAIR:
+            # A repair with no labour charge is just a screen sale recorded
+            # under the wrong heading, and would skew the repair figures.
+            if not attrs.get('repair_charge') or attrs['repair_charge'] <= 0:
+                raise serializers.ValidationError(
+                    {'repair_charge': 'An in-house repair needs a repair charge above zero.'}
+                )
+        elif attrs.get('repair_charge'):
+            raise serializers.ValidationError(
+                {'repair_charge': 'A repair charge only applies to an in-house repair.'}
+            )
+        return attrs
 
 
 class DispatchSerializer(serializers.Serializer):
@@ -63,7 +87,8 @@ class SaleSerializer(serializers.ModelSerializer):
         model = Sale
         fields = [
             'id', 'product_name', 'quantity', 'selling_price', 'buying_price',
-            'customer_name', 'status', 'total_amount', 'profit',
+            'customer_name', 'status', 'sale_type', 'repair_charge',
+            'item_type', 'total_amount', 'profit',
             'created_at', 'completed_at', 'reported_at',
         ]
 

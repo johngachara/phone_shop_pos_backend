@@ -75,7 +75,9 @@ def sales_summary(user, days=7):
     from django.db.models import Count, F, Sum
     from django.utils import timezone
 
-    from Alltechmanagement.admin_apis import completed_sales, profit_sum, sales_with_cost
+    from Alltechmanagement.admin_apis import (
+        completed_sales, profit_sum, repair_count, repair_revenue, revenue, sales_with_cost,
+    )
 
     days = min(int(days or 7), 365)
     since = timezone.now() - timedelta(days=days)
@@ -83,13 +85,15 @@ def sales_summary(user, days=7):
 
     totals = rows.aggregate(
         sales_count=Count('id'),
-        revenue=Sum(F('selling_price') * F('quantity')),
+        revenue=Sum(revenue()),
         profit=profit_sum(),
         sales_with_cost=sales_with_cost(),
+        repair_count=repair_count(),
+        repair_revenue=repair_revenue(),
     )
     top = list(
         rows.values('product_name')
-        .annotate(units=Sum('quantity'), revenue=Sum(F('selling_price') * F('quantity')))
+        .annotate(units=Sum('quantity'), revenue=Sum(revenue()))
         .order_by('-revenue')[:10]
     )
     return {
@@ -100,6 +104,12 @@ def sales_summary(user, days=7):
         # Stated so the assistant does not present profit from a subset as if
         # it covered everything.
         'profit_covers_sales': totals['sales_with_cost'] or 0,
+        # In-house repairs: a screen fitted by the shop, paid for as the screen
+        # plus a labour charge. Their full value is already inside `revenue`;
+        # these say how much of it was repair work.
+        'in_house_repairs': totals['repair_count'] or 0,
+        'repair_labour_revenue': str(totals['repair_revenue'] or 0),
+        'customer_sales': (totals['sales_count'] or 0) - (totals['repair_count'] or 0),
         'top_products': [
             {'product_name': r['product_name'], 'units': r['units'],
              'revenue': str(r['revenue'])}
@@ -122,7 +132,7 @@ def top_customers(days=7, limit=5):
     from django.db.models import Count, F, Sum
     from django.utils import timezone
 
-    from Alltechmanagement.admin_apis import completed_sales
+    from Alltechmanagement.admin_apis import completed_sales, revenue
 
     days = min(int(days or 7), 365)
     limit = min(int(limit or 5), 20)
@@ -133,7 +143,7 @@ def top_customers(days=7, limit=5):
         .exclude(customer_name='null')
         .values('customer_name')
         .annotate(
-            total_spent=Sum(F('selling_price') * F('quantity')),
+            total_spent=Sum(revenue()),
             purchase_count=Count('id'),
         )
         .order_by('-total_spent')[:limit]
@@ -207,28 +217,21 @@ BATCH_TOOLS = {'add_stock_batch', 'update_stock_batch', 'delete_stock_batch'}
 def check_role_restriction(user, name, args):
     """Return an error string, or None when the caller's role allows this write.
 
-    Employees run the till and can add new stock or correct a name/price, but
-    changing how much of something exists, or removing it outright, is a
-    manager decision -- the same split the manual POS UI enforces by hiding
-    those controls for an Employee. That UI restriction is client-side only;
-    this is the one path that has to be enforced here, because the assistant
-    reaches the same endpoints without ever going through that UI.
+    Employees run the till: they add stock and sell it. Changing an existing
+    item in any way, or removing it, is a manager decision. The update and
+    delete endpoints enforce this themselves now, so this is not the only
+    guard -- it exists so the assistant refuses with a plain explanation
+    before a proposal is ever shown, rather than letting an employee confirm
+    an action that then fails with a 403.
     """
     if getattr(user, 'role', None) == ROLE_MANAGER:
         return None
 
-    if name == 'delete_stock':
-        return 'Deleting a stock item requires the manager role.'
-    if name == 'delete_stock_batch':
-        return 'Deleting stock items requires the manager role.'
-    if name == 'update_stock' and args.get('quantity') is not None:
-        return ('Changing stock quantity requires the manager role. '
-                'You can still update the name or price.')
-    if name == 'update_stock_batch':
-        items = args.get('items') or []
-        if any(isinstance(item, dict) and item.get('quantity') is not None for item in items):
-            return ('Changing stock quantity requires the manager role. '
-                    'You can still update names or prices.')
+    if name in ('delete_stock', 'delete_stock_batch'):
+        return 'Deleting stock requires the manager role. You can add stock and sell it.'
+    if name in ('update_stock', 'update_stock_batch'):
+        return ('Changing an existing stock item requires the manager role. '
+                'You can add stock and sell it; ask a manager to correct an item.')
     return None
 
 

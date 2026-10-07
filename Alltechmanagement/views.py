@@ -24,7 +24,9 @@ from Alltechmanagement.push import notify_managers
 from Alltechmanagement.search import search_products
 from rest_framework.response import Response
 from Alltechmanagement.GPTAgent import run_conversation
-from Alltechmanagement.admin_apis import invalidate_dashboard_caches
+from Alltechmanagement.admin_apis import (
+    REPAIR, invalidate_dashboard_caches, repair_count, repair_revenue, revenue,
+)
 from Alltechmanagement.celery_jwt import CeleryJWTAuthentication
 from Alltechmanagement.customPagination import CustomPagination, StandardResultsSetPagination
 from Alltechmanagement.models import Accessory, Customer, Insight, Sale, Stock
@@ -222,6 +224,8 @@ async def sell_api(request, product_id):
                     buying_price=buying_price_at_sale,
                     quantity=quantity,
                     customer_name=customer_name,
+                    sale_type=serializer.validated_data['sale_type'],
+                    repair_charge=serializer.validated_data['repair_charge'],
                     stock=product,
                     status=(
                         Sale.Status.COMPLETED if complete_now else Sale.Status.PENDING
@@ -365,7 +369,9 @@ async def add_stock2_api(request):
     )
 
 
-@async_api_view(['DELETE'])
+# Manager only. Employees run the till: they add stock and sell it, and any
+# change to an existing item -- or removing it -- is a manager decision.
+@async_api_view(['DELETE'], permissions=[IsManager])
 @throttle_classes([InventoryModificationThrottle])
 async def delete_stock2_api(request, id):
     try:
@@ -396,12 +402,20 @@ async def delete_stock2_api(request, id):
         await asyncio.create_task(async_operations())
 
         return Response({'status': 'success'}, status=status.HTTP_200_OK)
+    except Stock.DoesNotExist:
+        # Was swallowed by the handler below, which returned its error body
+        # with the default 200 -- so deleting a missing item read as success.
+        return Response({'error': 'Item not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         logging.error(f"Error in delete_stock2_api: {e}", exc_info=True)
-        return Response({"Error": "An internal error has occurred."})
+        return Response(
+            {"error": "An internal error has occurred."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
-@async_api_view(['PUT', 'PATCH'])
+# Manager only, for the same reason as delete_stock2_api.
+@async_api_view(['PUT', 'PATCH'], permissions=[IsManager])
 @throttle_classes([InventoryModificationThrottle])
 async def update_stock2_api(request, id):
     @sync_to_async
@@ -562,9 +576,15 @@ def send_sales2_api(request):
         )
         # Sum(selling_price) counted a 3-unit sale once, so any multi-unit sale
         # was undercounted in every report sent so far.
-        total = transactions.aggregate(
-            amount=Sum(F('selling_price') * F('quantity'), output_field=DecimalField())
-        )['amount']
+        # revenue() adds the repair charge of an in-house repair on top of
+        # the screen, so the report total is what was actually taken.
+        totals = transactions.aggregate(
+            amount=Sum(revenue()),
+            repair_amount=Sum(revenue(), filter=REPAIR),
+            repair_count=repair_count(),
+            repair_charges=repair_revenue(),
+        )
+        total = totals['amount']
 
         if not transactions.exists():
             return Response('No completed transactions available.', status=404)
@@ -577,6 +597,10 @@ def send_sales2_api(request):
         html_content = render_to_string('completed_transactions.html', {
             'transactions': transactions,
             'total': total,
+            'repair_total': totals['repair_amount'] or 0,
+            'repair_count': totals['repair_count'] or 0,
+            'repair_charges': totals['repair_charges'] or 0,
+            'customer_total': (total or 0) - (totals['repair_amount'] or 0),
             'heading': 'Shop 2 Sales',
             'year': timezone.now().year,
         })

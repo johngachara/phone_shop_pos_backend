@@ -135,7 +135,9 @@ def test_deleting_an_accessory_keeps_its_sales(client, accessory):
         "product_name": accessory.product_name, "price": "500.00",
         "quantity": 1, "customer_name": "Jane", "complete": True,
     }, format="json")
-    assert client.delete(f"/api/accessories/{accessory.pk}/delete/").status_code == 204
+    manager = APIClient()
+    manager.force_authenticate(user=principal(ROLE_MANAGER))
+    assert manager.delete(f"/api/accessories/{accessory.pk}/delete/").status_code == 204
     sale = Sale.objects.get(item_type=Sale.ItemType.ACCESSORY)
     assert sale.product_name == "USB-C Cable"
     assert sale.accessory is None

@@ -43,6 +43,9 @@
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
+            /* Seven columns: at the body's x-large size the headings overflow
+               their cells in the PDF. */
+            font-size: 0.65em;
         }
         .sales-table th, .sales-table td {
             border: 1px solid #e0e0e0;
@@ -135,27 +138,40 @@
         <table class="sales-table">
             <thead>
                 <tr>
-                    <th>Product Name</th>
-                    <th>Customer Name</th>
-                    <th>Selling Price</th>
+                    <th width="24%">Product</th>
+                    <th width="14%">Type</th>
+                    <th width="18%">Customer</th>
+                    <th width="7%">Qty</th>
+                    <th width="12%">Unit Price</th>
+                    <th width="12%">Repair</th>
+                    <th width="13%">Total</th>
                 </tr>
             </thead>
             <tbody>
                 {% for transaction in transactions %}
                 <tr>
                     <td data-label="Product Name">{{ transaction.product_name }}</td>
+                    <td data-label="Type">{% if transaction.sale_type == "REPAIR" %}Repair{% else %}Sale{% endif %}</td>
                     <td data-label="Customer Name">{{ transaction.customer_name }}</td>
-                    <td data-label="Selling Price" class="price">{{ transaction.selling_price }}</td>
+                    <td data-label="Qty">{{ transaction.quantity }}</td>
+                    <td data-label="Unit Price" class="price">{{ transaction.selling_price }}</td>
+                    <td data-label="Repair Charge" class="price">{% if transaction.sale_type == "REPAIR" %}{{ transaction.repair_charge }}{% else %}-{% endif %}</td>
+                    <td data-label="Total" class="price">{{ transaction.total_amount }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        
+
         <!-- Total Section -->
         <div class="total-section">
-            Total: {{ total }}
+            <div>Customer sales: {{ customer_total }}</div>
+            {% if repair_count %}
+            <div>In-house repairs ({{ repair_count }}): {{ repair_total }}
+                (of which repair charges: {{ repair_charges }})</div>
+            {% endif %}
+            <div>Total: {{ total }}</div>
         </div>
-        
+
         <!-- Footer -->
         <div class="email-footer">
             © {{ year }} AllTech Team
