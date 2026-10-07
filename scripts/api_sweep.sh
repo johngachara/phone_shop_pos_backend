@@ -47,6 +47,17 @@ sweep() {
 # Without it, a sweep that passes proves only that something responded.
 ROLE="${3:-none}"
 
+# Picks the expected codes for the role being swept: employee, manager, none.
+# Used where the role decides the answer, so a sweep run as an employee fails
+# if a manager-only route lets them through, rather than accepting 200|403.
+by_role() {
+    case "$ROLE" in
+        employee) echo "$1" ;;
+        manager)  echo "$2" ;;
+        *)        echo "$3" ;;
+    esac
+}
+
 echo "Sweeping ${BASE_URL} as role=${ROLE}"
 [ -z "$TOKEN" ] && echo "(no token supplied: authenticated endpoints are expected to reject)"
 echo
@@ -61,8 +72,8 @@ sweep GET    /api/get_shop2_stock             "200|401|403"
 sweep GET    "/api/get_shop2_stock?q=iphone"   "200|401|403"
 sweep GET    /api/get_shop2_stock_api/1       "200|401|403|404"
 sweep POST   /api/add_stock2                  "200|201|400|401|403"
-sweep PATCH  /api/update_stock2/1             "200|400|401|403|404"
-sweep DELETE /api/delete_stock2_api/1         "200|204|401|403|404"
+sweep PATCH  /api/update_stock2/1             "$(by_role 403 '200|400|404' '401|403')"  # manager only
+sweep DELETE /api/delete_stock2_api/1         "$(by_role 403 '200|204|404' '401|403')"  # manager only
 sweep GET    /api/detailed/low_stock/         "200|401|403"
 
 echo
@@ -75,13 +86,13 @@ sweep GET  /api/customers/                    "200|401|403"
 
 echo
 echo "Analytics (Manager-only after PR 6)"
-sweep GET /api/dashboard/                     "200|401|403"
-sweep GET /api/weekly/                        "200|401|403"
-sweep GET /api/monthly/                       "200|401|403"
-sweep GET /api/yearly/                        "200|401|403"
-sweep GET /api/customers-insights/            "200|401|403"
-sweep GET /api/products-insights/             "200|401|403"
-sweep GET /api/patterns/                      "200|401|403"
+sweep GET /api/dashboard/                   "$(by_role 403 200 '401|403')"
+sweep GET /api/weekly/                      "$(by_role 403 200 '401|403')"
+sweep GET /api/monthly/                     "$(by_role 403 200 '401|403')"
+sweep GET /api/yearly/                      "$(by_role 403 200 '401|403')"
+sweep GET /api/customers-insights/          "$(by_role 403 200 '401|403')"
+sweep GET /api/products-insights/           "$(by_role 403 200 '401|403')"
+sweep GET /api/patterns/                    "$(by_role 403 200 '401|403')"
 
 echo
 echo "Machine-to-machine"
@@ -96,8 +107,8 @@ sweep GET    /api/accessories/                "200|401|403"
 sweep GET    "/api/accessories/?q=cable"       "200|401|403"
 sweep GET    /api/accessories/1/              "200|401|403|404"
 sweep POST   /api/accessories/add/            "201|400|401|403"
-sweep PATCH  /api/accessories/1/update/       "200|400|401|403|404"
-sweep DELETE /api/accessories/1/delete/       "204|401|403|404"
+sweep PATCH  /api/accessories/1/update/       "$(by_role 403 '200|400|404' '401|403')"  # manager only
+sweep DELETE /api/accessories/1/delete/       "$(by_role 403 '204|404' '401|403')"  # manager only
 sweep POST   /api/accessories/1/sell/         "200|400|401|403|404"
 
 echo

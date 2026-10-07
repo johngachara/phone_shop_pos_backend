@@ -107,6 +107,13 @@ class Sale(models.Model):
         SCREEN = 'SCREEN', 'Screen'
         ACCESSORY = 'ACCESSORY', 'Accessory'
 
+    class SaleType(models.TextChoices):
+        # A screen handed over the counter.
+        CUSTOMER = 'CUSTOMER', 'Customer sale'
+        # A screen fitted by the shop: the customer pays for the screen and
+        # for the labour of fitting it.
+        REPAIR = 'REPAIR', 'In-house repair'
+
     # Denormalised on purpose: a sale record must keep the name and prices it was
     # actually sold under, even if the stock item is later renamed or deleted.
     product_name = models.CharField(max_length=100, db_index=True)
@@ -131,6 +138,30 @@ class Sale(models.Model):
         validators=[MinValueValidator(Decimal('0'))],
     )
     customer_name = models.CharField(max_length=255, default='null', db_index=True)
+
+    sale_type = models.CharField(
+        max_length=16,
+        choices=SaleType.choices,
+        # db_default, not just default: the migration lands on the live
+        # database before this code is deployed, and the code still running
+        # there inserts sales without these columns. A Python-only default
+        # would make every one of those inserts fail on NOT NULL.
+        default=SaleType.CUSTOMER,
+        db_default=SaleType.CUSTOMER,
+        db_index=True,
+    )
+    # The labour charged for an in-house repair, once per sale rather than per
+    # unit: a screen at 1200 fitted for 700 is a 1900 sale. Zero, not NULL, on
+    # every other sale, so revenue is one expression -- price * quantity +
+    # repair_charge -- that is already correct for every existing row. It has
+    # no buying price: it is the shop's own labour, so all of it is profit.
+    repair_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0'),
+        db_default=Decimal('0'),
+        validators=[MinValueValidator(Decimal('0'))],
+    )
 
     # Which inventory this came from. Denormalised alongside the two nullable
     # links below so a sale still reports correctly after its item is deleted.
@@ -196,8 +227,12 @@ class Sale(models.Model):
         return value if isinstance(value, Decimal) else Decimal(str(value))
 
     @property
-    def total_amount(self):
+    def screen_amount(self):
         return self._money(self.selling_price) * self.quantity
+
+    @property
+    def total_amount(self):
+        return self.screen_amount + self._money(self.repair_charge or 0)
 
     @property
     def profit(self):
@@ -213,7 +248,10 @@ class Sale(models.Model):
         """
         if self.buying_price is None or self._money(self.buying_price) == 0:
             return None
-        return (self._money(self.selling_price) - self._money(self.buying_price)) * self.quantity
+        return (
+            (self._money(self.selling_price) - self._money(self.buying_price)) * self.quantity
+            + self._money(self.repair_charge or 0)
+        )
 
 
 class Customer(models.Model):

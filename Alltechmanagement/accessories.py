@@ -29,7 +29,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.response import Response
 
 from Alltechmanagement.models import Accessory, Sale
-from Alltechmanagement.permissions import IsEmployeeOrManager
+from Alltechmanagement.permissions import IsEmployeeOrManager, IsManager
 from Alltechmanagement.views import record_customer_spend
 from Alltechmanagement.search import search_products
 from Alltechmanagement.serializers import AccessorySerializer, SellSerializer
@@ -121,7 +121,9 @@ def add_accessory(request):
 
 
 @api_view(['PUT', 'PATCH'])
-@permission_classes([IsEmployeeOrManager])
+# Manager only: employees add and sell, changing or removing an item is a
+# manager decision.
+@permission_classes([IsManager])
 @throttle_classes([InventoryModificationThrottle])
 def update_accessory(request, accessory_id):
     try:
@@ -139,7 +141,9 @@ def update_accessory(request, accessory_id):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsEmployeeOrManager])
+# Manager only: employees add and sell, changing or removing an item is a
+# manager decision.
+@permission_classes([IsManager])
 @throttle_classes([InventoryModificationThrottle])
 def delete_accessory(request, accessory_id):
     try:
@@ -167,6 +171,12 @@ def sell_accessory(request, accessory_id):
     serializer = SellSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
+    # In-house repair is a screen being fitted. An accessory has no repair to
+    # attach a labour charge to.
+    if serializer.validated_data['sale_type'] != Sale.SaleType.CUSTOMER:
+        return Response(
+            {'sale_type': 'Accessories can only be sold to a customer.'}, status=400
+        )
 
     complete_now = bool(request.data.get('complete'))
     quantity = serializer.validated_data['quantity']

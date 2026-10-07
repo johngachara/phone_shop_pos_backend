@@ -1,7 +1,7 @@
 import logging
 
 from django.core.cache import cache
-from django.db.models import Q, DecimalField, Sum, Count, Avg, F, Max, Min
+from django.db.models import Q, DecimalField, ExpressionWrapper, Sum, Count, Avg, F, Max, Min
 from django.db.models.functions import (
      TruncWeek, TruncMonth,
     ExtractHour, ExtractDay, ExtractMonth, ExtractYear,
@@ -68,12 +68,64 @@ def handle_database_errors(func):
 HAS_COST = Q(buying_price__isnull=False) & ~Q(buying_price=0)
 
 
-def profit_sum():
-    return Sum(
-        (F('selling_price') - F('buying_price')) * F('quantity'),
-        filter=HAS_COST,
-        output_field=DecimalField(max_digits=14, decimal_places=2),
+MONEY = DecimalField(max_digits=14, decimal_places=2)
+
+
+def revenue():
+    """What the customer paid for one sale: the screen(s) plus any repair labour.
+
+    The one definition of revenue every report uses. repair_charge is zero on
+    every sale that is not an in-house repair, so this is the old
+    selling_price * quantity for all of those and for every historical row.
+    A function rather than a module-level expression so each aggregate gets
+    its own copy.
+    """
+    return ExpressionWrapper(
+        F('selling_price') * F('quantity') + F('repair_charge'), output_field=MONEY
     )
+
+
+def profit_sum():
+    # The repair charge is the shop's own labour, with no buying price to
+    # subtract, so all of it is profit -- but only on sales that have a known
+    # screen cost, so a repair cannot sneak a profit figure past HAS_COST.
+    return Sum(
+        (F('selling_price') - F('buying_price')) * F('quantity') + F('repair_charge'),
+        filter=HAS_COST,
+        output_field=MONEY,
+    )
+
+
+REPAIR = Q(sale_type=Sale.SaleType.REPAIR)
+
+
+def repair_count():
+    return Count('id', filter=REPAIR)
+
+
+def repair_revenue():
+    """Labour charged on in-house repairs -- the repair half of their revenue."""
+    return Sum('repair_charge', filter=REPAIR, output_field=MONEY)
+
+
+def by_sale_type(queryset):
+    """Customer sales and in-house repairs side by side, for one period."""
+    return {
+        row['sale_type']: {
+            'sales_count': row['sales_count'],
+            'total_sales': row['total_sales'] or 0,
+            'total_profit': row['total_profit'] or 0,
+            'sales_with_cost': row['sales_with_cost'],
+            'repair_charges': row['repair_charges'] or 0,
+        }
+        for row in queryset.values('sale_type').annotate(
+            sales_count=Count('id'),
+            total_sales=Sum(revenue()),
+            total_profit=profit_sum(),
+            sales_with_cost=sales_with_cost(),
+            repair_charges=Sum('repair_charge', output_field=MONEY),
+        ).order_by('sale_type')
+    }
 
 
 def sales_with_cost():
@@ -103,11 +155,13 @@ def main_dashboard(request):
                 created_at__year=current_year
             ).aggregate(
                 sales_count=Count('id'),
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 total_items_sold=Sum('quantity'),
-                unique_customers=Count('customer_name', distinct=True)
+                unique_customers=Count('customer_name', distinct=True),
+                repair_count=repair_count(),
+                repair_revenue=repair_revenue(),
             )
 
             # Initialize with zero if no data
@@ -121,7 +175,7 @@ def main_dashboard(request):
                 created_at__date=yesterday,
                 created_at__year=current_year
             ).aggregate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost()
             )
@@ -134,7 +188,7 @@ def main_dashboard(request):
                 created_at__date__gte=current_week_start,
                 created_at__year=current_year
             ).aggregate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost()
             )
@@ -143,14 +197,14 @@ def main_dashboard(request):
                 created_at__date__range=[last_week_start, current_week_start - timedelta(days=1)],
                 created_at__year=current_year
             ).aggregate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost()
             )
 
             # All-time totals for comparison
             all_time_totals = completed_sales().aggregate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 total_orders=Count('id'),
@@ -172,7 +226,7 @@ def main_dashboard(request):
                 .values('item_type')
                 .annotate(
                     sales_count=Count('id'),
-                    total_sales=Sum(F('selling_price') * F('quantity')),
+                    total_sales=Sum(revenue()),
                     total_profit=profit_sum(),
                     sales_with_cost=sales_with_cost(),
                 )
@@ -183,6 +237,13 @@ def main_dashboard(request):
                 'current_year': current_year,
                 'today_metrics': today_metrics,
                 'by_item_type': by_item_type,
+                # Customer sales vs in-house repairs, this year and today.
+                'by_sale_type': by_sale_type(
+                    completed_sales().filter(created_at__year=current_year)
+                ),
+                'today_by_sale_type': by_sale_type(
+                    completed_sales().filter(created_at__date=today)
+                ),
                 'yesterday_total_sales': yesterday_metrics['total_sales'] or 0,
                 'current_week_sales': current_week_sales['total_sales'] or 0,
                 'last_week_sales': last_week_sales['total_sales'] or 0,
@@ -229,11 +290,13 @@ def weekly_analysis(request):
             ).annotate(
                 week=TruncWeek('created_at')
             ).values('week').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 total_orders=Count('id'),
+                repair_count=repair_count(),
+                repair_revenue=repair_revenue(),
                 unique_customers=Count('customer_name', distinct=True),
                 total_items=Sum('quantity'),
                 busiest_day=Max('created_at__date'),
@@ -246,7 +309,7 @@ def weekly_analysis(request):
             ).annotate(
                 week=TruncWeek('created_at')
             ).values('week').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost()
             ).order_by('week')
@@ -284,11 +347,13 @@ def monthly_analysis(request):
             ).annotate(
                 month=TruncMonth('created_at')
             ).values('month').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 total_orders=Count('id'),
+                repair_count=repair_count(),
+                repair_revenue=repair_revenue(),
                 unique_customers=Count('customer_name', distinct=True),
                 total_items=Sum('quantity')
             ).order_by('-month')
@@ -307,7 +372,7 @@ def monthly_analysis(request):
                 year=ExtractYear('created_at'),
                 month=TruncMonth('created_at')
             ).values('year', 'month').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost()
             ).order_by('year', 'month')
@@ -365,14 +430,16 @@ def yearly_analysis(request):
             current_year_data = completed_sales().filter(
                 created_at__year=current_year
             ).aggregate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 total_orders=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                repair_count=repair_count(),
+                repair_revenue=repair_revenue(),
+                average_order_value=Avg(revenue()),
                 unique_customers=Count('customer_name', distinct=True),
                 total_items=Sum('quantity'),
-                highest_sale=Max(F('selling_price') * F('quantity')),
+                highest_sale=Max(revenue()),
                 average_items_per_order=Avg('quantity')
             )
 
@@ -380,11 +447,11 @@ def yearly_analysis(request):
             yearly_data = completed_sales().annotate(
                 year=ExtractYear('created_at')
             ).values('year').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 total_orders=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 unique_customers=Count('customer_name', distinct=True),
                 total_items=Sum('quantity')
             ).order_by('-year')
@@ -394,7 +461,7 @@ def yearly_analysis(request):
                 year=ExtractYear('created_at'),
                 month=ExtractMonth('created_at')
             ).values('year', 'month').annotate(
-                sales=Sum(F('selling_price') * F('quantity')),
+                sales=Sum(revenue()),
                 orders=Count('id'),
                 items_sold=Sum('quantity')
             ).order_by('year', 'month')
@@ -429,9 +496,9 @@ def customer_insights(request):
             current_year_top_customers = completed_sales().filter(
                 created_at__year=current_year
             ).values('customer_name').annotate(
-                total_spent=Sum(F('selling_price') * F('quantity')),
+                total_spent=Sum(revenue()),
                 purchase_count=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 first_purchase=Min('created_at'),
                 last_purchase=Max('created_at'),
                 total_items=Sum('quantity')
@@ -441,9 +508,9 @@ def customer_insights(request):
 
             # All-time top customers
             all_time_top_customers = completed_sales().values('customer_name').annotate(
-                total_spent=Sum(F('selling_price') * F('quantity')),
+                total_spent=Sum(revenue()),
                 purchase_count=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 first_purchase=Min('created_at'),
                 last_purchase=Max('created_at'),
                 total_items=Sum('quantity')
@@ -491,24 +558,26 @@ def product_insights(request):
             current_year_performance = completed_sales().filter(
                 created_at__year=current_year
             ).values('product_name').annotate(
-                total_revenue=Sum(F('selling_price') * F('quantity')),
+                total_revenue=Sum(revenue()),
                 units_sold=Sum('quantity'),
                 average_price=Avg('selling_price'),
                 first_sale=Min('created_at'),
                 last_sale=Max('created_at'),
                 unique_customers=Count('customer_name', distinct=True),
-                total_orders=Count('id')
+                total_orders=Count('id'),
+                repair_count=repair_count(),
             ).order_by('-total_revenue')
 
             # All-time product performance
             all_time_performance = completed_sales().values('product_name').annotate(
-                total_revenue=Sum(F('selling_price') * F('quantity')),
+                total_revenue=Sum(revenue()),
                 units_sold=Sum('quantity'),
                 average_price=Avg('selling_price'),
                 first_sale=Min('created_at'),
                 last_sale=Max('created_at'),
                 unique_customers=Count('customer_name', distinct=True),
-                total_orders=Count('id')
+                total_orders=Count('id'),
+                repair_count=repair_count(),
             ).order_by('-total_revenue')
 
             # Monthly trends for current year
@@ -517,7 +586,7 @@ def product_insights(request):
             ).annotate(
                 month=TruncMonth('created_at')
             ).values('month', 'product_name').annotate(
-                revenue=Sum(F('selling_price') * F('quantity')),
+                revenue=Sum(revenue()),
                 units_sold=Sum('quantity'),
                 average_price=Avg('selling_price')
             ).order_by('month', '-revenue')
@@ -529,7 +598,7 @@ def product_insights(request):
             ).annotate(
                 year=ExtractYear('created_at')
             ).values('year', 'product_name').annotate(
-                total_revenue=Sum(F('selling_price') * F('quantity')),
+                total_revenue=Sum(revenue()),
                 units_sold=Sum('quantity')
             ).order_by('product_name', 'year')
             response_data = {
@@ -567,11 +636,11 @@ def sales_patterns(request):
             ).annotate(
                 day=ExtractDay('created_at')
             ).values('day').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 order_count=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 items_sold=Sum('quantity')
             ).order_by('day')
 
@@ -581,11 +650,11 @@ def sales_patterns(request):
             ).annotate(
                 hour=ExtractHour('created_at')
             ).values('hour').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 order_count=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity'))
+                average_order_value=Avg(revenue())
             ).order_by('hour')
 
             # Day of week analysis
@@ -594,11 +663,11 @@ def sales_patterns(request):
             ).annotate(
                 day_of_week=ExtractDay('created_at')
             ).values('day_of_week').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 order_count=Count('id'),
-                average_order_value=Avg(F('selling_price') * F('quantity')),
+                average_order_value=Avg(revenue()),
                 items_sold=Sum('quantity')
             ).order_by('day_of_week')
 
@@ -609,7 +678,7 @@ def sales_patterns(request):
                 hour=ExtractHour('created_at'),
                 day_of_week=ExtractDay('created_at')
             ).values('hour', 'day_of_week').annotate(
-                total_sales=Sum(F('selling_price') * F('quantity')),
+                total_sales=Sum(revenue()),
                 total_profit=profit_sum(),
                 sales_with_cost=sales_with_cost(),
                 order_count=Count('id')

@@ -22,6 +22,10 @@ Use only the figures given to you. Do not invent numbers, and do not estimate
 anything you were not given. Where profit covers fewer sales than the total,
 say so plainly rather than presenting it as the whole picture.
 
+An in-house repair is a screen the shop fitted itself: the customer paid for
+the screen plus a repair (labour) charge. Report customer sales and in-house
+repairs separately when there were any repairs.
+
 Write in short sections with bullet points. Amounts are Kenyan shillings.
 """
 
@@ -47,6 +51,9 @@ def run_conversation(user_prompt, days=1):
         f"- revenue: {summary['revenue']}\n"
         f"- profit: {summary['profit']} "
         f"(covering {summary['profit_covers_sales']} of {summary['sales_count']} sales)\n"
+        f"- customer sales: {summary['customer_sales']}, in-house repairs: "
+        f"{summary['in_house_repairs']} (repair labour charged: "
+        f"{summary['repair_labour_revenue']}, already included in revenue)\n"
         f"- best sellers: {summary['top_products']}\n\n"
         f"Items at or below 3 in stock: {stock['items']}\n\n"
         f"Top {len(customers)} customers by revenue over the last {days} day(s), "
